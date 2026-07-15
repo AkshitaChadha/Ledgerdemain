@@ -1,4 +1,41 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import coinDropSound from "./assets/coin_sound.mp3";
+const INCOME_CATEGORIES = [
+  "Salary",
+  "Freelance",
+  "Bonus",
+  "Refund",
+  "Interest"
+];
+
+const EXPENSE_CATEGORIES = [
+  "Food",
+  "Transport",
+  "Shopping",
+  "Bills",
+  "Entertainment",
+  "Health",
+  "Education",
+  "Travel",
+  "Other"
+];
+
+const CATEGORY_SIGILS = {
+  Salary: "💼",
+  Freelance: "🧑‍💻",
+  Bonus: "🎁",
+  Refund: "↩️",
+  Interest: "📈",
+  Food: "🍔",
+  Transport: "🚕",
+  Shopping: "🛍️",
+  Bills: "🧾",
+  Entertainment: "🎬",
+  Health: "❤️",
+  Education: "📚",
+  Travel: "✈️",
+  Other: "✨"
+};
 
 const initialForm = {
   title: "",
@@ -14,17 +51,57 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
-  const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [serverError, setServerError] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
+  const [showOmens, setShowOmens] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [deletingIds, setDeletingIds] = useState([]);
+  const [sparklingIds, setSparklingIds] = useState([]);
+  const [coinRain, setCoinRain] = useState(false);
+  const toastTimerRef = useRef(null);
+  const coinSound = useRef(null);
+  const bellRef = useRef(null);
+  
+
+  const categories = form.type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
   useEffect(() => {
     loadBootstrap();
   }, []);
+
+  useEffect(() => {
+    coinSound.current = new Audio(coinDropSound);
+    coinSound.current.volume = 0.35;
+  }, []);
+  useEffect(() => {
+    if (!categories.includes(form.category)) {
+      setForm((current) => ({ ...current, category: categories[0] }));
+    }
+  }, [form.type]);
+
+  useEffect(() => {
+    function handleWindowClick(event) {
+      if (bellRef.current && !bellRef.current.contains(event.target)) {
+        setShowOmens(false);
+      }
+    }
+
+    window.addEventListener("click", handleWindowClick);
+    return () => window.removeEventListener("click", handleWindowClick);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    },
+    []
+  );
 
   async function loadBootstrap() {
     setLoading(true);
@@ -35,19 +112,29 @@ export default function App() {
         throw new Error("Failed to load dashboard data.");
       }
       const data = await response.json();
-      setCategories(data.categories);
       setTransactions(data.transactions);
       setSummary(data.summary);
       setNotifications(data.notifications);
       setForm((current) => ({
         ...current,
-        category: data.categories[0] || current.category
+        category: current.type === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]
       }));
     } catch (error) {
       setServerError(error.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function showToast(payload) {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToast(payload);
+    toastTimerRef.current = window.setTimeout(
+      () => setToast(null),
+      payload?.persistent ? 5200 : 3200
+    );
   }
 
   async function handleSubmit(event) {
@@ -72,19 +159,34 @@ export default function App() {
         throw new Error("Please review the transaction details.");
       }
 
-      if (data.transactions) {
-        setTransactions(data.transactions);
-      } else {
-        setTransactions((current) => [data.transaction, ...current]);
-      }
+      setTransactions(data.transactions || [data.transaction, ...transactions]);
       setSummary(data.summary);
       setNotifications(data.notifications);
-      setForm({
+      if (!isEditing && data.transaction?.type === "income") {
+        if (coinSound.current) {
+            coinSound.current.currentTime = 0;
+            coinSound.current.play().catch(() => {});
+        }
+        setCoinRain(true);
+        setTimeout(() => {
+          setCoinRain(false);
+        }, 1200);
+        setSparklingIds((current) => [...current, data.transaction.id]);
+        window.setTimeout(() => {
+          setSparklingIds((current) =>
+            current.filter((id) => id !== data.transaction.id)
+          );
+        }, 1400);
+      }
+setForm({
         ...initialForm,
-        category: form.category,
+        category: form.type === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0],
         transaction_date: new Date().toISOString().slice(0, 10)
       });
       setEditingId(null);
+      showToast({
+        message: isEditing ? "The spell shifted - entry updated." : "Abracadabra - entry added."
+      });
     } catch (error) {
       setServerError(error.message);
     } finally {
@@ -112,32 +214,87 @@ export default function App() {
     setServerError("");
     setForm({
       ...initialForm,
-      category: categories[0] || initialForm.category,
+      category: EXPENSE_CATEGORIES[0],
       transaction_date: new Date().toISOString().slice(0, 10)
     });
   }
 
   async function handleDelete(transaction) {
-    const shouldDelete = window.confirm(`Delete "${transaction.title}" from the ledger?`);
-    if (!shouldDelete) return;
+    // Start the animation immediately
+    setDeletingIds((current) => [...current, transaction.id]);
 
     setServerError("");
-    const response = await fetch(`/api/transactions/${transaction.id}`, { method: "DELETE" });
-    const data = await response.json();
 
-    if (!response.ok) {
-      setServerError(data.error || "Failed to delete the transaction.");
-      return;
-    }
+    try {
+      // Delete in the background while the animation is running
+      const response = await fetch(`/api/transactions/${transaction.id}`, {
+        method: "DELETE",
+      });
 
-    setTransactions(data.transactions);
-    setSummary(data.summary);
-    setNotifications(data.notifications);
-    if (editingId === transaction.id) {
-      cancelEditing();
+      const data = await response.json();
+
+      if (!response.ok) {
+        setDeletingIds((current) =>
+          current.filter((id) => id !== transaction.id)
+        );
+        setServerError(data.error || "Failed to delete the transaction.");
+        return;
+      }
+
+      // Wait long enough for the smoke animation to finish
+      await wait(600);
+
+      // Remove animation class
+      setDeletingIds((current) =>
+        current.filter((id) => id !== transaction.id)
+      );
+
+      // Now actually remove from the UI
+      setTransactions(data.transactions);
+      setSummary(data.summary);
+      setNotifications(data.notifications);
+
+      if (editingId === transaction.id) {
+        cancelEditing();
+      }
+
+      showToast({
+        message: `Poof. ${transaction.title} vanished.`,
+        actionLabel: "Undo",
+        persistent: true,
+        onAction: async () => {
+          setToast(null);
+
+          const undoResponse = await fetch(
+            `/api/transactions/undo-delete/${data.undoEventId}`,
+            {
+              method: "POST",
+            }
+          );
+
+          const undoData = await undoResponse.json();
+
+          if (!undoResponse.ok) {
+            setServerError("The vanished entry refused to return.");
+            return;
+          }
+
+          setTransactions(undoData.transactions);
+          setSummary(undoData.summary);
+          setNotifications(undoData.notifications);
+
+          showToast({
+            message: "✨ The ledger reversed the spell.",
+          });
+        },
+      });
+    } catch (err) {
+      setDeletingIds((current) =>
+        current.filter((id) => id !== transaction.id)
+      );
+      setServerError("Failed to delete the transaction.");
     }
   }
-
   async function markNotificationsRead() {
     const response = await fetch("/api/notifications/read-all", { method: "POST" });
     const data = await response.json();
@@ -159,31 +316,51 @@ export default function App() {
     return transaction.type === filter;
   });
 
+  const unreadNotifications = notifications.filter((item) => !item.is_read);
+
   if (loading) {
-    return <div className="screen-message">Loading Ledger Pulse...</div>;
+    return <LoadingScreen />;
   }
 
   return (
     <main className="app-shell">
-      <section className="hero-panel">
-        <div className="hero-copy-block">
-          <p className="eyebrow">Smart mini-ledger</p>
-          <h1>Ledger Pulse</h1>
-          <p className="hero-copy">
-            Track money, spot unusual spending, and surface action-worthy insights
-            before a simple ledger turns noisy.
-          </p>
-          <div className="hero-actions">
-            <button className="primary-button" onClick={loadDemoData} type="button">
-              Load demo data
-            </button>
+      {coinRain && <CoinRain />}
+      <header className="branding-bar">
+        <div className="brand-lockup">
+          <WandIcon className="brand-icon" />
+          <div>
+            <h1>Ledgerdemain</h1>
+            <p>Your money, made magically simple.</p>
           </div>
         </div>
-      </section>
+
+        <div className="branding-actions">
+          <button className="ghost-button compact-ghost demo-button" onClick={loadDemoData} type="button">
+            Load demo data
+          </button>
+          <div className="omen-wrap" ref={bellRef}>
+            <button
+              className={`bell-button ${showOmens ? "open" : ""}`}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowOmens((current) => !current);
+              }}
+            >
+              <BellIcon />
+              {unreadNotifications.length ? <span className="bell-badge">{unreadNotifications.length}</span> : null}
+            </button>
+            {showOmens ? (
+              <NotificationPanel
+                notifications={notifications}
+                onReadAll={markNotificationsRead}
+              />
+            ) : null}
+          </div>
+        </div>
+      </header>
 
       {serverError ? <div className="banner error">{serverError}</div> : null}
-
-      <InsightsCenter notifications={notifications} onReadAll={markNotificationsRead} />
 
       <section className="dashboard-grid">
         <div className="stack">
@@ -195,14 +372,17 @@ export default function App() {
             setFilter={setFilter}
             onEdit={startEditing}
             onDelete={handleDelete}
+            deletingIds={deletingIds}
+            sparklingIds={sparklingIds}
+            
           />
         </div>
         <div className="stack">
           <TransactionForm
             form={form}
             setForm={setForm}
-            onSubmit={handleSubmit}
             categories={categories}
+            onSubmit={handleSubmit}
             errors={errors}
             submitting={submitting}
             editingId={editingId}
@@ -211,7 +391,23 @@ export default function App() {
           <CategoryCard categories={summary?.topCategories || []} />
         </div>
       </section>
+
+      {toast ? <Toast toast={toast} onClose={() => setToast(null)} /> : null}
     </main>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="screen-message shimmer-screen">
+      <div className="shimmer-bar large" />
+      <div className="shimmer-bar medium" />
+      <div className="shimmer-grid">
+        <div className="shimmer-card" />
+        <div className="shimmer-card" />
+        <div className="shimmer-card" />
+      </div>
+    </div>
   );
 }
 
@@ -222,7 +418,7 @@ function SummaryCards({ summary }) {
     { label: "Income", value: summary.income, tone: "income" },
     { label: "Expense", value: summary.expense, tone: "expense" },
     { label: "Net", value: summary.net, tone: summary.net >= 0 ? "income" : "expense" },
-    { label: "Entries", value: summary.transactionCount, tone: "neutral" }
+    { label: "Entries", value: summary.transactionCount, tone: "neutral", raw: true }
   ];
 
   return (
@@ -230,95 +426,54 @@ function SummaryCards({ summary }) {
       {cards.map((card) => (
         <article key={card.label} className={`summary-card ${card.tone}`}>
           <span>{card.label}</span>
-          <strong>{card.label === "Entries" ? card.value : formatCurrency(card.value)}</strong>
+          <AnimatedValue value={card.value} raw={card.raw} />
         </article>
       ))}
     </div>
   );
 }
 
-function InsightsCenter({ notifications, onReadAll }) {
-  const unreadInsights = notifications.filter((item) => !item.is_read);
-  const activeInsights = unreadInsights.slice(0, 3);
-  const historyInsights = notifications.filter((item) => item.is_read).slice(0, 6);
+function AnimatedValue({ value, raw = false }) {
+  const [displayValue, setDisplayValue] = useState(0);
 
-  return (
-    <section className="insights-panel">
-      <div className="insights-head">
-        <div>
-          <p className="eyebrow">Insights center</p>
-          <h2>{activeInsights.length ? "Active signals" : "No active signals"}</h2>
-        </div>
-        <div className="insight-actions">
-          <span className="insight-count">{unreadInsights.length} unread</span>
-          <button className="ghost-button" onClick={onReadAll} type="button">
-            Mark all read
-          </button>
-        </div>
-      </div>
+  useEffect(() => {
+    let frameId;
+    const duration = 900;
+    const start = performance.now();
+    const target = Number(value || 0);
 
-      {activeInsights.length ? (
-        <div className="insight-grid">
-          {activeInsights.map((item) => (
-            <article key={item.id} className={`insight-card ${item.severity}`}>
-              <div className="insight-topline">
-                <span className={`severity-pill ${item.severity}`}>{item.severity}</span>
-                <span className="status-label">Needs attention</span>
-              </div>
-              <h3>{item.title}</h3>
-              <p>{item.message}</p>
-              <div className="insight-source">
-                <span>Triggered by</span>
-                <strong>{item.source_transaction_title || "System insight"}</strong>
-              </div>
-              <div className="insight-action-block">
-                <span>{item.action_label || "Suggested action"}</span>
-                <strong>{item.action_text || "Review this insight."}</strong>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-state subtle">
-          No alerts are active right now. Add a transaction or load demo data to surface
-          insights.
-        </div>
-      )}
+    function tick(now) {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - (1 - progress) ** 3;
+      setDisplayValue(target * eased);
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      }
+    }
 
-      {historyInsights.length ? (
-        <div className="history-block">
-          <div className="history-head">
-            <h3>Read history</h3>
-            <span>{historyInsights.length} archived insights</span>
-          </div>
-          <div className="history-list">
-            {historyInsights.map((item) => (
-              <article key={item.id} className={`history-item ${item.severity}`}>
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.message}</p>
-                </div>
-                <span>{item.source_transaction_title || "System"}</span>
-              </article>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </section>
-  );
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [value]);
+
+  return <strong>{raw ? Math.round(displayValue) : formatCurrency(displayValue)}</strong>;
 }
 
 function PulseCard({ points }) {
   const maxExpense = Math.max(...points.map((point) => point.expense), 1);
+  const flaggedPoint = points.find((point) => point.flagged);
+  const ratio = flaggedPoint?.ratio || 0;
+  const caption = flaggedPoint
+    ? `Something stirred on ${prettyDate(flaggedPoint.date)} - spending spiked ${ratio.toFixed(1)}x above average.`
+    : "The ledger is calm for now - no anomaly has broken the forecast.";
 
   return (
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Unique twist</p>
+          <p className="eyebrow">The forecast</p>
           <h2>Spending Pulse</h2>
+          <p className="chart-caption">{caption}</p>
         </div>
-        <p className="muted">A custom 14-day pulse chart with anomaly highlights.</p>
       </div>
 
       <div className="pulse-chart">
@@ -326,11 +481,13 @@ function PulseCard({ points }) {
           const height = Math.max((point.expense / maxExpense) * 100, point.expense ? 12 : 4);
           return (
             <div key={point.date} className="pulse-bar-wrap">
-              <div
-                className={`pulse-bar ${point.flagged ? "flagged" : ""}`}
-                style={{ height: `${height}%` }}
-                title={`${point.date}: ${formatCurrency(point.expense)}`}
-              />
+              <div className={`pulse-frame ${point.flagged ? "flagged" : ""}`}>
+                <div
+                  className={`pulse-bar ${point.flagged ? "flagged" : ""}`}
+                  style={{ height: `${height}%` }}
+                  title={`${point.date}: ${formatCurrency(point.expense)}`}
+                />
+              </div>
               <span>{point.date.slice(5)}</span>
             </div>
           );
@@ -343,8 +500,8 @@ function PulseCard({ points }) {
 function TransactionForm({
   form,
   setForm,
-  onSubmit,
   categories,
+  onSubmit,
   errors,
   submitting,
   editingId,
@@ -354,8 +511,8 @@ function TransactionForm({
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">{editingId ? "Edit transaction" : "Add transaction"}</p>
-          <h2>{editingId ? "Update this entry" : "Capture a new entry"}</h2>
+          <p className="eyebrow">Cast a new entry</p>
+          <h2>{editingId ? "Rewrite this entry" : "Capture a new spell"}</h2>
         </div>
       </div>
 
@@ -386,7 +543,13 @@ function TransactionForm({
             <span>Type</span>
             <select
               value={form.type}
-              onChange={(event) => setForm({ ...form, type: event.target.value })}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  type: event.target.value,
+                  category: event.target.value === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]
+                })
+              }
             >
               <option value="expense">Expense</option>
               <option value="income">Income</option>
@@ -447,12 +610,20 @@ function TransactionForm({
   );
 }
 
-function TransactionsTable({ transactions, filter, setFilter, onEdit, onDelete }) {
+function TransactionsTable({
+  transactions,
+  filter,
+  setFilter,
+  onEdit,
+  onDelete,
+  deletingIds,
+  sparklingIds
+}) {
   return (
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Ledger</p>
+          <p className="eyebrow">The ledger</p>
           <h2>Transaction history</h2>
         </div>
         <div className="filter-group" role="tablist" aria-label="Transaction type filter">
@@ -495,12 +666,22 @@ function TransactionsTable({ transactions, filter, setFilter, onEdit, onDelete }
             </thead>
             <tbody>
               {transactions.map((transaction) => (
-                <tr key={transaction.id}>
+                <tr
+                  key={transaction.id}
+                  className={[
+                    deletingIds.includes(transaction.id) ? "vanishing-row" : "",
+                    sparklingIds.includes(transaction.id) ? "sparkle-row" : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
                   <td>
                     <strong>{transaction.title}</strong>
                     {transaction.note ? <span>{transaction.note}</span> : null}
                   </td>
-                  <td>{transaction.category}</td>
+                  <td>
+                    <CategorySigil category={transaction.category} />
+                  </td>
                   <td>
                     <span className={`chip ${transaction.type}`}>{transaction.type}</span>
                   </td>
@@ -511,19 +692,16 @@ function TransactionsTable({ transactions, filter, setFilter, onEdit, onDelete }
                   </td>
                   <td>
                     <div className="row-actions">
-                      <button
-                        className="table-action"
-                        type="button"
-                        onClick={() => onEdit(transaction)}
-                      >
+                      <button className="edit-link" type="button" onClick={() => onEdit(transaction)}>
                         Edit
                       </button>
                       <button
-                        className="table-action danger"
+                        className="smoke-button"
                         type="button"
+                        title="Vanish this entry"
                         onClick={() => onDelete(transaction)}
                       >
-                        Delete
+                        <FlameIcon />
                       </button>
                     </div>
                   </td>
@@ -533,7 +711,7 @@ function TransactionsTable({ transactions, filter, setFilter, onEdit, onDelete }
           </table>
         </div>
       ) : (
-        <div className="empty-state">No transactions yet. Add the first entry to wake up the pulse.</div>
+        <div className="empty-state">The ledger awaits its first incantation.</div>
       )}
     </section>
   );
@@ -544,7 +722,7 @@ function CategoryCard({ categories }) {
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Where money goes</p>
+          <p className="eyebrow">The breakdown</p>
           <h2>Expense hotspots</h2>
         </div>
       </div>
@@ -553,7 +731,7 @@ function CategoryCard({ categories }) {
         {categories.length ? (
           categories.map((item) => (
             <div key={item.category} className="category-row">
-              <span>{item.category}</span>
+              <CategorySigil category={item.category} />
               <strong>{formatCurrency(item.amount)}</strong>
             </div>
           ))
@@ -565,6 +743,162 @@ function CategoryCard({ categories }) {
   );
 }
 
+function NotificationPanel({ notifications, onReadAll }) {
+  return (
+    <section className="omens-panel">
+      <div className="omens-head">
+        <div>
+          <p className="eyebrow">Warnings & Omens</p>
+          <h3>Messages from the ledger</h3>
+        </div>
+        <button className="ghost-button compact-ghost" type="button" onClick={onReadAll}>
+          Mark read
+        </button>
+      </div>
+      <div className="omens-list">
+        {notifications.length ? (
+          notifications.slice(0, 6).map((item) => (
+            <article key={item.id} className={`omen-item ${item.severity}`}>
+              <p>{formatOmen(item)}</p>
+              <span>{formatTimestamp(item.created_at)}</span>
+            </article>
+          ))
+        ) : (
+          <div className="empty-state subtle">No ravens yet. The omens are quiet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CategorySigil({ category }) {
+  return (
+    <span className="category-sigil">
+      <span className="sigil-mark">{CATEGORY_SIGILS[category] || category.slice(0, 1)}</span>
+      {category}
+    </span>
+  );
+}
+
+function Toast({ toast, onClose }) {
+  return (
+    <div className={`toast ${toast.actionLabel ? "special" : ""}`}>
+      <p>{toast.message}</p>
+      <div className="toast-actions">
+        {toast.actionLabel ? (
+          <button
+            className="toast-action"
+            type="button"
+            onClick={toast.onAction}
+          >
+            {toast.actionLabel}
+          </button>
+        ) : null}
+        <button className="toast-close" type="button" onClick={onClose}>
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WandIcon({ className }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 20 20 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="m15 3 .7 2.3L18 6l-2.3.7L15 9l-.7-2.3L12 6l2.3-.7L15 3Z" fill="currentColor" />
+      <path d="m7 11 .5 1.5L9 13l-1.5.5L7 15l-.5-1.5L5 13l1.5-.5L7 11Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 4a4 4 0 0 0-4 4v1.3c0 .9-.3 1.8-.9 2.5L5.7 13.5c-.7.8-.1 2 .9 2h10.8c1 0 1.6-1.2.9-2l-1.4-1.7a4 4 0 0 1-.9-2.5V8a4 4 0 0 0-4-4Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10 18a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function FlameIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12.4 3.4c.4 2.6-1.4 3.8-2.8 5.7-1.2 1.5-1.6 2.6-1.6 4.2a4 4 0 1 0 8 0c0-2.7-1.2-4.5-3.6-6.9.1 1.5-.6 2.6-1.7 3.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CoinRain() {
+  const coins = Array.from({ length: 14 });
+  return (
+    <div className="coin-rain">
+      {coins.map((_, index) => {
+        const left = 45 + (Math.random() - 0.5) * 12;
+        const size = 34 + Math.random() * 18;
+        const delay = Math.random() * 450;
+        const duration = 1800 + Math.random() * 900;
+        const drift = -80 + Math.random() * 160;
+        const rotate = 400 + Math.random() * 500;
+        return (
+          <svg
+            key={index}
+            className="coin-svg"
+            style={{
+              left: `${left}%`,
+              width: `${size}px`,
+              height: `${size}px`,
+              animationDelay: `${delay}ms`,
+              animationDuration: `${duration}ms`,
+              "--drift": `${drift}px`,
+              "--rotate": `${rotate}deg`
+            }}
+            viewBox="0 0 64 64"
+          >
+            <defs>
+              <linearGradient id={`gold${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#FFF7BF"/>
+                <stop offset="40%" stopColor="#FFD54A"/>
+                <stop offset="100%" stopColor="#C98900"/>
+              </linearGradient>
+            </defs>
+            <circle
+              cx="32"
+              cy="32"
+              r="26"
+              fill={`url(#gold${index})`}
+              stroke="#B97A00"
+              strokeWidth="3"
+            />
+            <text
+              x="32"
+              y="40"
+              textAnchor="middle"
+              fontWeight="700"
+              fontSize="24"
+              fill="#8B5A00"
+            >
+              L
+            </text>
+          </svg>
+        );
+      })}
+    </div>
+  );
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -572,3 +906,34 @@ function formatCurrency(value) {
     maximumFractionDigits: 2
   }).format(Number(value || 0));
 }
+
+function formatTimestamp(value) {
+  if (!value) return "Moments ago";
+  const parsed = new Date(value.replace(" ", "T"));
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(parsed);
+}
+
+function formatOmen(item) {
+  if (item.severity === "critical") {
+    return `A warning arrives by raven - ${item.message}`;
+  }
+  if (item.severity === "warning") {
+    return `The cards tremble - ${item.message}`;
+  }
+  return `A whisper circles the wand - ${item.message}`;
+}
+
+function prettyDate(value) {
+  const parsed = new Date(value);
+  return new Intl.DateTimeFormat("en-IN", { month: "long", day: "numeric" }).format(parsed);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+

@@ -10,8 +10,10 @@ from .services.ledger import (
     get_transaction,
     list_transactions,
     recent_transactions,
+    record_delete_event,
     seed_demo_data,
     summary,
+    undo_delete_event,
     update_transaction,
 )
 from .services.notifications import (
@@ -140,6 +142,7 @@ def remove_transaction(transaction_id: int):
     if not existing:
         return jsonify({"error": "Transaction not found."}), 404
 
+    event_id = record_delete_event(existing)
     delete_transaction(transaction_id)
     create_notification(
         "Transaction deleted",
@@ -154,6 +157,34 @@ def remove_transaction(transaction_id: int):
 
     return jsonify(
         {
+            "transactions": list_transactions(),
+            "summary": summary(),
+            "notifications": get_notifications(),
+            "undoEventId": event_id,
+        }
+    )
+
+
+@api.post("/transactions/undo-delete/<int:event_id>")
+def undo_delete_transaction(event_id: int):
+    restored = undo_delete_event(event_id)
+    if not restored:
+        return jsonify({"error": "This delete can no longer be undone."}), 409
+
+    create_notification(
+        "Transaction restored",
+        f"{restored['title']} returned to the ledger.",
+        "info",
+        "in-app",
+        "Review restored entry",
+        "The delete event was replayed backward from the ledger history.",
+        restored["id"],
+        restored["title"],
+    )
+
+    return jsonify(
+        {
+            "transaction": restored,
             "transactions": list_transactions(),
             "summary": summary(),
             "notifications": get_notifications(),

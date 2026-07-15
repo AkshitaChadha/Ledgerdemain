@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ledger_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type TEXT NOT NULL,
+    transaction_id INTEGER,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    undone_at TEXT
+);
 """
 
 

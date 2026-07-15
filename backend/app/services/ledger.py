@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -103,6 +104,61 @@ def delete_transaction(transaction_id: int) -> bool:
     return cursor.rowcount > 0
 
 
+def record_delete_event(transaction: dict) -> int:
+    db = get_db()
+    cursor = db.execute(
+        """
+        INSERT INTO ledger_events(event_type, transaction_id, payload, created_at, undone_at)
+        VALUES ('transaction.deleted', ?, ?, datetime('now'), NULL)
+        """,
+        (transaction["id"], json.dumps(transaction)),
+    )
+    db.commit()
+    return cursor.lastrowid
+
+
+def undo_delete_event(event_id: int) -> dict | None:
+    db = get_db()
+    event = db.execute(
+        """
+        SELECT id, payload, undone_at
+        FROM ledger_events
+        WHERE id = ? AND event_type = 'transaction.deleted'
+        """,
+        (event_id,),
+    ).fetchone()
+
+    if not event or event["undone_at"]:
+        return None
+
+    transaction = json.loads(event["payload"])
+    existing = get_transaction(int(transaction["id"]))
+    if existing:
+        db.execute("UPDATE ledger_events SET undone_at = datetime('now') WHERE id = ?", (event_id,))
+        db.commit()
+        return existing
+
+    db.execute(
+        """
+        INSERT INTO transactions(id, title, amount, type, category, note, transaction_date, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            transaction["id"],
+            transaction["title"],
+            transaction["amount"],
+            transaction["type"],
+            transaction["category"],
+            transaction.get("note", ""),
+            transaction["transaction_date"],
+            transaction["created_at"],
+        ),
+    )
+    db.execute("UPDATE ledger_events SET undone_at = datetime('now') WHERE id = ?", (event_id,))
+    db.commit()
+    return get_transaction(int(transaction["id"]))
+
+
 def seed_demo_data() -> list[dict]:
     demo_rows = [
         ("Monthly salary", 68000, "income", "Salary", "July salary credited", "2026-07-01"),
@@ -168,7 +224,7 @@ def summary() -> dict:
 def _build_pulse(transactions: list[dict]) -> list[dict]:
     today = datetime.now().date()
     points = []
-    baseline_values = []
+    candidates = []
 
     for offset in range(13, -1, -1):
         day = today - timedelta(days=offset)
@@ -178,14 +234,25 @@ def _build_pulse(transactions: list[dict]) -> list[dict]:
             for item in transactions
             if item["type"] == "expense" and item["transaction_date"] == day_key
         )
-        baseline_values.append(total_expense)
-        baseline = sum(baseline_values) / len(baseline_values) if baseline_values else 0
-        points.append(
-            {
-                "date": day_key,
-                "expense": round(total_expense, 2),
-                "flagged": baseline > 0 and total_expense > baseline * 1.6,
-            }
-        )
+        prior_expenses = [point["expense"] for point in points if point["expense"] > 0]
+        baseline = sum(prior_expenses) / len(prior_expenses) if prior_expenses else 0
+        ratio = (total_expense / baseline) if baseline > 0 else 0
+
+        point = {
+            "date": day_key,
+            "expense": round(total_expense, 2),
+            "baseline": round(baseline, 2),
+            "ratio": round(ratio, 2),
+            "flagged": False,
+        }
+        points.append(point)
+
+        if baseline > 0 and total_expense > baseline * 1.6:
+            candidates.append(point)
+
+    if candidates:
+        standout = max(candidates, key=lambda item: (item["ratio"], item["expense"], item["date"]))
+        for point in points:
+            point["flagged"] = point["date"] == standout["date"]
 
     return points

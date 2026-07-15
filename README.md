@@ -1,6 +1,6 @@
-# Ledger Pulse
+# Ledgerdemain
 
-Ledger Pulse is a lightweight full-stack mini-ledger built for the Bytex challenge. It helps users record income and expenses, review categories, see instant summaries, and receive smart notifications when spending patterns look risky or unusual.
+Ledgerdemain is a lightweight full-stack mini-ledger built for the Bytex challenge. It helps users record income and expenses, review categories, see instant summaries, and receive smart notifications when spending patterns look risky or unusual.
 
 ## Why this project fits the challenge
 
@@ -15,6 +15,7 @@ It also adds a unique twist:
 
 - A rule-based smart alert engine that detects duplicate entries, broad categorization, spending spikes, and negative weekly cashflow
 - A custom `Spending Pulse` visualization that highlights unusually heavy expense days over the last 14 days
+- An event-backed undo flow for deleted transactions, so the smoke delete interaction represents a real reversible ledger decision
 
 ## Tech stack
 
@@ -47,6 +48,7 @@ frontend/
 - Read smart in-app alerts
 - Optionally send alert payloads to a webhook URL
 - Spot anomaly days in the Spending Pulse chart
+- Undo deleted transactions through a lightweight event log
 
 ## AI usage
 
@@ -76,6 +78,7 @@ This submission is intentionally built with AI assistance, but not blindly gener
 - Replaced generic charts with a custom-built Spending Pulse visualization
 - Added user-facing validation and polished error states instead of relying on raw API failures
 - Designed notifications as meaningful financial signals rather than simple “transaction added” messages
+- Replaced a basic hard-delete-only flow with event-backed undo, which makes the themed delete animation map to real application behavior
 
 ## Local setup
 
@@ -101,7 +104,6 @@ The frontend runs on `http://localhost:5173` and proxies API requests to the Fla
 
 ## Future improvements
 
-- Edit and delete transactions
 - User authentication
 - Budget goals per category
 - Scheduled digest notifications

@@ -182,7 +182,10 @@ export default function App() {
     const unread = (nextNotifications || []).filter((item) => !item.is_read);
 
     if (options.flash) {
-      const fresh = unread.filter((item) => !notificationIdsRef.current.has(item.id));
+      const flashSource = options.flashNotifications || unread;
+      const fresh = flashSource.filter(
+        (item) => !item.is_read && !notificationIdsRef.current.has(item.id)
+      );
 
       fresh.forEach((item) => {
         setLiveNotifications((current) => [item, ...current].slice(0, 4));
@@ -420,7 +423,10 @@ setForm({
       : deriveMonthsFromTransactions(data.transactions);
     setTransactions(data.transactions);
     setSummary(data.summary);
-    setNotificationState(data.notifications, { flash: true });
+    setNotificationState(data.notifications, {
+      flash: true,
+      flashNotifications: data.newNotifications || [],
+    });
     setMonths(seededMonths);
     setSelectedMonth(seededMonths[0]?.value || "");
     setTransactionPage(0);
@@ -449,10 +455,10 @@ setForm({
       const emailCopy = {
         welcome: data.emailSent
           ? "Welcome email sent. The ravens know where to fly."
-          : "Email saved. Add RESEND_API_KEY to send the welcome mail.",
+          : "Email saved. Check RESEND_API_KEY and verified sender to send welcome mail.",
         changed: data.emailSent
           ? "Alert email changed. Confirmation sent to the new address."
-          : "Email changed. Add RESEND_API_KEY to send confirmation mail.",
+          : "Email changed. Check RESEND_API_KEY and verified sender to send confirmation mail.",
       };
 
       showToast({

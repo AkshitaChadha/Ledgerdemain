@@ -69,24 +69,14 @@ def save_settings():
     payload = request.get_json() or {}
     previous_email = (get_setting("notification_email") or "").strip()
     next_email = (payload.get("notification_email") or "").strip()
+    welcomed_email = (get_setting("notification_email_welcome_sent_to") or "").strip()
 
     set_setting("notification_email", next_email)
 
     email_event = None
     email_sent = False
 
-    if next_email and not previous_email:
-        email_event = "welcome"
-        email_sent = _send_direct_email(
-            next_email,
-            "Welcome to Ledgerdemain",
-            """
-            <h2>Welcome to Ledgerdemain</h2>
-            <p>Your alert email is now connected.</p>
-            <p>The ledger will email you only for important moments: possible duplicates and high-priority spending warnings.</p>
-            """,
-        )
-    elif next_email and next_email.lower() != previous_email.lower():
+    if next_email and previous_email and next_email.lower() != previous_email.lower():
         email_event = "changed"
         email_sent = _send_direct_email(
             next_email,
@@ -97,6 +87,21 @@ def save_settings():
             <p>If you did not make this change, review your local app settings.</p>
             """,
         )
+        if email_sent:
+            set_setting("notification_email_welcome_sent_to", next_email)
+    elif next_email and welcomed_email.lower() != next_email.lower():
+        email_event = "welcome"
+        email_sent = _send_direct_email(
+            next_email,
+            "Welcome to Ledgerdemain",
+            """
+            <h2>Welcome to Ledgerdemain</h2>
+            <p>Your alert email is now connected.</p>
+            <p>The ledger will email you only for important moments: possible duplicates and high-priority spending warnings.</p>
+            """,
+        )
+        if email_sent:
+            set_setting("notification_email_welcome_sent_to", next_email)
 
     return jsonify({
         "success": True,
@@ -322,7 +327,7 @@ def undo_delete_transaction(event_id: int):
 @api.post("/seed")
 def seed():
     transactions = seed_demo_data()
-    create_notification(
+    created_notification = create_notification(
         "Demo data loaded",
         "Sample ledger entries were added so the dashboard and pulse can be reviewed quickly.",
         "info",
@@ -335,6 +340,7 @@ def seed():
             "transactions": transactions,
             "summary": summary(),
             "notifications": get_notifications(),
+            "newNotifications": [created_notification],
             "months": available_months(),
         }
     )

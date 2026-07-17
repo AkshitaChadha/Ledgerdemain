@@ -47,7 +47,7 @@ frontend/
 - Get income, expense, net balance, and category summaries
 - Read smart in-app alerts from the bell menu
 - See new warnings slide in on the right side of the screen and fade away like real product notifications
-- Send important alert emails through Resend
+- Send important alert emails through SMTP
 - Optionally send alert payloads to a webhook URL
 - Spot anomaly days in the Spending Pulse chart
 - Browse transaction history in pages of 10 entries inside the ledger card
@@ -55,7 +55,7 @@ frontend/
 
 ## Notification and email use cases
 
-Ledgerdemain avoids noisy emails. In-app notifications are used for ledger activity, while Resend email is reserved for moments that deserve attention:
+Ledgerdemain avoids noisy emails. In-app notifications are used for ledger activity, while SMTP email is reserved for moments that deserve attention:
 
 - Possible duplicate transaction detected before saving
 - Warning or critical smart spending alert, such as unusual spending spikes or negative cashflow risk
@@ -63,11 +63,17 @@ Ledgerdemain avoids noisy emails. In-app notifications are used for ledger activ
 - Confirmation email when the alert email is changed
 - Routine edits, deletes, restores, and demo-data events stay in-app only
 
-Configure email delivery with:
+Configure email delivery with SMTP:
+
+For Gmail, enable 2-Step Verification, create an App Password, then set:
 
 ```bash
-RESEND_API_KEY=your_resend_key
-RESEND_FROM_EMAIL="Ledgerdemain <your_verified_sender@example.com>"
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your.email@gmail.com
+SMTP_PASSWORD=your_16_character_app_password
+SMTP_FROM_EMAIL=your.email@gmail.com
+SMTP_FROM_NAME=Ledgerdemain
 ```
 
 ## AI usage

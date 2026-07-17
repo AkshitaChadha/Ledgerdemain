@@ -28,7 +28,7 @@ from .services.notifications import (
 )
 from .services.rules import analyze_transaction
 
-from .services.email import send_email, send_email_with_status
+from .services.email import email_delivery_status, send_email, send_email_with_status
 
 api = Blueprint("api", __name__)
 
@@ -49,13 +49,47 @@ EMAIL_ALERT_SEVERITIES = {"warning", "critical"}
 
 
 def _send_notification_email(subject: str, html: str) -> bool:
-    """Send only explicit user-facing warnings through Resend."""
+    """Send only explicit user-facing warnings through SMTP."""
     return send_email(get_setting("notification_email"), subject, html)
 
 
 def _send_direct_email_status(to_email: str | None, subject: str, html: str) -> dict:
     """Send account/settings emails and return a deploy-friendly failure reason."""
     return send_email_with_status(to_email, subject, html)
+
+
+def _ledger_email(title: str, eyebrow: str, body: str, action: str | None = None) -> str:
+    action_html = (
+        f"""
+        <div style="margin-top:22px;padding:14px 16px;border-radius:16px;background:#f7f4ff;border:1px solid #ded6ff;color:#35246b;">
+            <strong>Next spell:</strong> {action}
+        </div>
+        """
+        if action
+        else ""
+    )
+
+    return f"""
+    <div style="margin:0;padding:28px;background:#fbf3df;font-family:Georgia,'Times New Roman',serif;color:#202033;">
+        <div style="max-width:620px;margin:0 auto;background:#fffaf0;border:1px solid #e9dcc0;border-radius:24px;overflow:hidden;box-shadow:0 18px 45px rgba(35,25,70,.12);">
+            <div style="padding:24px 28px;background:linear-gradient(135deg,#5b3fdb,#281b68);color:#fff;">
+                <div style="font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#e8b84b;font-weight:700;">{eyebrow}</div>
+                <h1 style="margin:8px 0 4px;font-size:30px;line-height:1.1;">Ledgerdemain</h1>
+                <p style="margin:0;color:#ded8ff;">Your money, made magically simple.</p>
+            </div>
+            <div style="padding:28px;">
+                <h2 style="margin:0 0 14px;font-size:24px;color:#241b4d;">{title}</h2>
+                <div style="font-family:Inter,Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.7;color:#4b5563;">
+                    {body}
+                </div>
+                {action_html}
+            </div>
+            <div style="padding:18px 28px;border-top:1px solid #efe3ca;font-family:Inter,Segoe UI,Arial,sans-serif;font-size:12px;color:#7b7280;">
+                Sent by Ledgerdemain because this looked important enough to leave the ledger.
+            </div>
+        </div>
+    </div>
+    """
 
 @api.get("/settings")
 def get_settings():
@@ -82,11 +116,15 @@ def save_settings():
         email_result = _send_direct_email_status(
             next_email,
             "Ledgerdemain alert email changed",
-            """
-            <h2>Your Ledgerdemain alert email was changed</h2>
-            <p>This address will now receive important ledger warnings.</p>
-            <p>If you did not make this change, review your local app settings.</p>
-            """,
+            _ledger_email(
+                "The ravens have a new route.",
+                "Alert route changed",
+                """
+                <p>Your Ledgerdemain alert email was updated successfully.</p>
+                <p>Important omens, duplicate warnings, and spending spikes will now arrive at this address.</p>
+                """,
+                "If this was not you, open the app and update the notification email.",
+            ),
         )
         email_sent = email_result["sent"]
         email_error = email_result["error"]
@@ -97,11 +135,16 @@ def save_settings():
         email_result = _send_direct_email_status(
             next_email,
             "Welcome to Ledgerdemain",
-            """
-            <h2>Welcome to Ledgerdemain</h2>
-            <p>Your alert email is now connected.</p>
-            <p>The ledger will email you only for important moments: possible duplicates and high-priority spending warnings.</p>
-            """,
+            _ledger_email(
+                "The ledger knows where to find you.",
+                "Welcome omen",
+                """
+                <p>Your alert email is connected.</p>
+                <p>Ledgerdemain will stay quiet for ordinary bookkeeping and only send mail when something deserves attention.</p>
+                <p>Expect a message for possible duplicates, unusual spending spikes, or cashflow warnings.</p>
+                """,
+                "Add a few entries or load demo data to see the warning system come alive.",
+            ),
         )
         email_sent = email_result["sent"]
         email_error = email_result["error"]
@@ -114,6 +157,35 @@ def save_settings():
         "emailSent": email_sent,
         "emailError": email_error,
     })
+
+
+@api.get("/settings/email-status")
+def settings_email_status():
+    return jsonify(email_delivery_status())
+
+
+@api.post("/settings/test-email")
+def send_settings_test_email():
+    email = (get_setting("notification_email") or "").strip()
+    result = _send_direct_email_status(
+        email,
+        "Ledgerdemain test email",
+        """
+        <h2>The raven found its route.</h2>
+        <p>This is a test email from Ledgerdemain. Future important ledger warnings will arrive here.</p>
+        """,
+    )
+
+    return jsonify(
+        {
+            "success": result["sent"],
+            "emailSent": result["sent"],
+            "emailError": result["error"],
+            "status": email_delivery_status(),
+        }
+    ), 200 if result["sent"] else 400
+
+
 @api.get("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -156,21 +228,18 @@ def add_transaction():
 
             _send_notification_email(
                 "Ledgerdemain detected a possible duplicate",
-                f"""
-                <h2>The ledger sensed an echo...</h2>
-
-                <p>
-                A transaction similar to
-                <b>{duplicate["transaction"]["title"]}</b>
-                was just entered.
-                </p>
-
-                <h3>Why it was flagged</h3>
-
-                <ul>
-                    {''.join(f'<li>{reason}</li>' for reason in duplicate["reasons"])}
-                </ul>
-                """,
+                _ledger_email(
+                    "The ledger sensed an echo.",
+                    "Duplicate warning",
+                    f"""
+                    <p>A transaction similar to <b>{duplicate["transaction"]["title"]}</b> was just entered.</p>
+                    <p>Why it was flagged:</p>
+                    <ul>
+                        {''.join(f'<li>{reason}</li>' for reason in duplicate["reasons"])}
+                    </ul>
+                    """,
+                    "Compare the entries before keeping both.",
+                ),
             )
 
             return jsonify(
@@ -209,12 +278,15 @@ def add_transaction():
         if alert.severity in EMAIL_ALERT_SEVERITIES:
             _send_notification_email(
                 alert.title,
-                f"""
-                <h2>{alert.title}</h2>
-
-                <p>{alert.message}</p>
-                <p><b>Suggested action:</b> {alert.action_text or "Review the latest ledger entry."}</p>
-                """,
+                _ledger_email(
+                    alert.title,
+                    "Warning omen",
+                    f"""
+                    <p>{alert.message}</p>
+                    <p>The ledger is not judging the spend. It is asking you to look twice.</p>
+                    """,
+                    alert.action_text or "Review the latest ledger entry.",
+                ),
             )
 
         maybe_send_webhook(

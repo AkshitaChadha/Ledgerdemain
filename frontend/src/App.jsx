@@ -455,10 +455,10 @@ setForm({
       const emailCopy = {
         welcome: data.emailSent
           ? "Welcome email sent. The ravens know where to fly."
-          : "Email saved. Check RESEND_API_KEY and verified sender to send welcome mail.",
+          : "✨ The ledger now knows where to send its whispers.",
         changed: data.emailSent
           ? "Alert email changed. Confirmation sent to the new address."
-          : "Email changed. Check RESEND_API_KEY and verified sender to send confirmation mail.",
+          : "Email changed. Confirmation mail will be sent once delivery is fully configured.",
       };
 
       showToast({

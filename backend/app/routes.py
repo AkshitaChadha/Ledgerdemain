@@ -28,7 +28,7 @@ from .services.notifications import (
 )
 from .services.rules import analyze_transaction
 
-from .services.email import send_email
+from .services.email import send_email, send_email_with_status
 
 api = Blueprint("api", __name__)
 
@@ -53,9 +53,9 @@ def _send_notification_email(subject: str, html: str) -> bool:
     return send_email(get_setting("notification_email"), subject, html)
 
 
-def _send_direct_email(to_email: str | None, subject: str, html: str) -> bool:
-    """Send account/settings emails to the address being configured."""
-    return send_email(to_email, subject, html)
+def _send_direct_email_status(to_email: str | None, subject: str, html: str) -> dict:
+    """Send account/settings emails and return a deploy-friendly failure reason."""
+    return send_email_with_status(to_email, subject, html)
 
 @api.get("/settings")
 def get_settings():
@@ -75,10 +75,11 @@ def save_settings():
 
     email_event = None
     email_sent = False
+    email_error = None
 
     if next_email and previous_email and next_email.lower() != previous_email.lower():
         email_event = "changed"
-        email_sent = _send_direct_email(
+        email_result = _send_direct_email_status(
             next_email,
             "Ledgerdemain alert email changed",
             """
@@ -87,11 +88,13 @@ def save_settings():
             <p>If you did not make this change, review your local app settings.</p>
             """,
         )
+        email_sent = email_result["sent"]
+        email_error = email_result["error"]
         if email_sent:
             set_setting("notification_email_welcome_sent_to", next_email)
     elif next_email and welcomed_email.lower() != next_email.lower():
         email_event = "welcome"
-        email_sent = _send_direct_email(
+        email_result = _send_direct_email_status(
             next_email,
             "Welcome to Ledgerdemain",
             """
@@ -100,6 +103,8 @@ def save_settings():
             <p>The ledger will email you only for important moments: possible duplicates and high-priority spending warnings.</p>
             """,
         )
+        email_sent = email_result["sent"]
+        email_error = email_result["error"]
         if email_sent:
             set_setting("notification_email_welcome_sent_to", next_email)
 
@@ -107,6 +112,7 @@ def save_settings():
         "success": True,
         "emailEvent": email_event,
         "emailSent": email_sent,
+        "emailError": email_error,
     })
 @api.get("/health")
 def health():

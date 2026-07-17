@@ -132,7 +132,7 @@ export default function App() {
     setLoading(true);
     setServerError("");
     try {
-      const response = fetch(`${API}/api/bootstrap`);
+      const response = await fetch(`${API}/api/bootstrap`);
       if (!response.ok) {
         throw new Error("Failed to load dashboard data.");
       }

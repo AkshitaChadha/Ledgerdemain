@@ -193,10 +193,14 @@ def health():
 
 @api.get("/bootstrap")
 def bootstrap():
+    transactions = list_transactions()
+    if not transactions:
+        transactions = seed_demo_data()
+
     return jsonify(
         {
             "categories": CATEGORIES,
-            "transactions": list_transactions(),
+            "transactions": transactions,
             "summary": summary(),
             "notifications": get_notifications(),
             "months":available_months(),

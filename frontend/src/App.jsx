@@ -408,30 +408,12 @@ setForm({
     }
   }
   async function markNotificationsRead() {
-    const response = await fetch(`${API}/api//notifications/read-all`, { method: "POST" });
+    const response = await fetch(`${API}/api/notifications/read-all`, { method: "POST" });
     const data = await response.json();
     setNotificationState(data.notifications);
     setShowOmens(false);
   }
 
-  async function loadDemoData() {
-    setServerError("");
-    const response = await fetch(`${API}/api/seed`, { method: "POST" });
-    const data = await response.json();
-    const seededMonths = data.months?.length
-      ? data.months
-      : deriveMonthsFromTransactions(data.transactions);
-    setTransactions(data.transactions);
-    setSummary(data.summary);
-    setNotificationState(data.notifications, {
-      flash: true,
-      flashNotifications: data.newNotifications || [],
-    });
-    setMonths(seededMonths);
-    setSelectedMonth(seededMonths[0]?.value || "");
-    setTransactionPage(0);
-    setEditingId(null);
-  }
   async function saveNotificationEmail() {
     setServerError("");
 
@@ -580,9 +562,6 @@ const monthPulse = (() => {
         </div>
 
         <div className="branding-actions">
-          <button className="ghost-button compact-ghost demo-button" onClick={loadDemoData} type="button">
-            Load demo data
-          </button>
           <div className="omen-wrap" ref={bellRef}>
             <button
               className={`bell-button ${showOmens ? "open" : ""}`}

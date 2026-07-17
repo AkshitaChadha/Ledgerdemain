@@ -44,6 +44,7 @@ frontend/
 
 - Add transactions with validation
 - View transaction history
+- See sample data automatically on a fresh database
 - Get income, expense, net balance, and category summaries
 - Read smart in-app alerts from the bell menu
 - See new warnings slide in on the right side of the screen and fade away like real product notifications

@@ -15,6 +15,10 @@ from .services.ledger import (
     summary,
     undo_delete_event,
     update_transaction,
+    find_possible_duplicate,
+    available_months,
+    get_setting,
+    set_setting
 )
 from .services.notifications import (
     create_notification,
@@ -23,6 +27,8 @@ from .services.notifications import (
     maybe_send_webhook,
 )
 from .services.rules import analyze_transaction
+
+from .services.email import send_email
 
 api = Blueprint("api", __name__)
 
@@ -39,7 +45,64 @@ CATEGORIES = [
     "Other",
 ]
 
+EMAIL_ALERT_SEVERITIES = {"warning", "critical"}
 
+
+def _send_notification_email(subject: str, html: str) -> bool:
+    """Send only explicit user-facing warnings through Resend."""
+    return send_email(get_setting("notification_email"), subject, html)
+
+
+def _send_direct_email(to_email: str | None, subject: str, html: str) -> bool:
+    """Send account/settings emails to the address being configured."""
+    return send_email(to_email, subject, html)
+
+@api.get("/settings")
+def get_settings():
+    return jsonify({
+        "notification_email": get_setting("notification_email")
+    })
+
+
+@api.post("/settings")
+def save_settings():
+    payload = request.get_json() or {}
+    previous_email = (get_setting("notification_email") or "").strip()
+    next_email = (payload.get("notification_email") or "").strip()
+
+    set_setting("notification_email", next_email)
+
+    email_event = None
+    email_sent = False
+
+    if next_email and not previous_email:
+        email_event = "welcome"
+        email_sent = _send_direct_email(
+            next_email,
+            "Welcome to Ledgerdemain",
+            """
+            <h2>Welcome to Ledgerdemain</h2>
+            <p>Your alert email is now connected.</p>
+            <p>The ledger will email you only for important moments: possible duplicates and high-priority spending warnings.</p>
+            """,
+        )
+    elif next_email and next_email.lower() != previous_email.lower():
+        email_event = "changed"
+        email_sent = _send_direct_email(
+            next_email,
+            "Ledgerdemain alert email changed",
+            """
+            <h2>Your Ledgerdemain alert email was changed</h2>
+            <p>This address will now receive important ledger warnings.</p>
+            <p>If you did not make this change, review your local app settings.</p>
+            """,
+        )
+
+    return jsonify({
+        "success": True,
+        "emailEvent": email_event,
+        "emailSent": email_sent,
+    })
 @api.get("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -53,6 +116,7 @@ def bootstrap():
             "transactions": list_transactions(),
             "summary": summary(),
             "notifications": get_notifications(),
+            "months":available_months(),
         }
     )
 
@@ -60,15 +124,66 @@ def bootstrap():
 @api.post("/transactions")
 def add_transaction():
     payload = request.get_json(silent=True) or {}
+
+    force_save = payload.pop("force_save", False)
+
+    # ---------------- Duplicate Detection ----------------
+    if not force_save:
+        duplicate = find_possible_duplicate(payload)
+
+        if duplicate:
+            create_notification(
+                "Possible duplicate detected",
+                f"{payload.get('title', 'This entry')} looks similar to {duplicate['transaction']['title']}.",
+                "warning",
+                "in-app",
+                "Review duplicate",
+                "Compare the amount, date, title, and category before saving.",
+                duplicate["transaction"]["id"],
+                duplicate["transaction"]["title"],
+            )
+
+            _send_notification_email(
+                "Ledgerdemain detected a possible duplicate",
+                f"""
+                <h2>The ledger sensed an echo...</h2>
+
+                <p>
+                A transaction similar to
+                <b>{duplicate["transaction"]["title"]}</b>
+                was just entered.
+                </p>
+
+                <h3>Why it was flagged</h3>
+
+                <ul>
+                    {''.join(f'<li>{reason}</li>' for reason in duplicate["reasons"])}
+                </ul>
+                """,
+            )
+
+            return jsonify(
+                {
+                    "duplicateFound": True,
+                    "duplicate": duplicate["transaction"],
+                    "matchReasons": duplicate["reasons"],
+                    "notifications": get_notifications(),
+                }
+            ), 200
+
+    # ---------------- Validation ----------------
     errors = _validate_transaction(payload)
     if errors:
         return jsonify({"errors": errors}), 400
 
+    # ---------------- Create Transaction ----------------
     recent = recent_transactions()
     created = create_transaction(payload)
     alerts = analyze_transaction(created, recent)
 
+    # ---------------- Notifications ----------------
     for alert in alerts:
+
         create_notification(
             alert.title,
             alert.message,
@@ -79,6 +194,18 @@ def add_transaction():
             alert.source_transaction_id,
             alert.source_transaction_title,
         )
+
+        if alert.severity in EMAIL_ALERT_SEVERITIES:
+            _send_notification_email(
+                alert.title,
+                f"""
+                <h2>{alert.title}</h2>
+
+                <p>{alert.message}</p>
+                <p><b>Suggested action:</b> {alert.action_text or "Review the latest ledger entry."}</p>
+                """,
+            )
+
         maybe_send_webhook(
             {
                 "title": alert.title,
@@ -90,6 +217,7 @@ def add_transaction():
             }
         )
 
+    # ---------------- Response ----------------
     return (
         jsonify(
             {
@@ -101,7 +229,6 @@ def add_transaction():
         ),
         201,
     )
-
 
 @api.put("/transactions/<int:transaction_id>")
 def edit_transaction(transaction_id: int):
@@ -208,6 +335,7 @@ def seed():
             "transactions": transactions,
             "summary": summary(),
             "notifications": get_notifications(),
+            "months": available_months(),
         }
     )
 

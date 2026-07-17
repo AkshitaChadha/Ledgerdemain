@@ -1,0 +1,78 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Ledgerdemain icon</title>
+  <desc>Square icon mark for Ledgerdemain: an open ledger book with ruled columns, a clasp, and a wand rising from the spine, for use as a favicon or app icon.</desc>
+
+  <defs>
+    <linearGradient id="wandGradI" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#F4B740"/>
+      <stop offset="100%" stop-color="#8B6FE8"/>
+    </linearGradient>
+    <radialGradient id="glowI" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F4B740" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#F4B740" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="pageGradI" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F3ECDC"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="120" height="120" rx="24" fill="#FBF6EC"/>
+
+  <g transform="translate(4,10)">
+    <circle cx="86" cy="16" r="30" fill="url(#glowI)"/>
+
+    <!-- page-stack thickness -->
+    <path d="M4 60 L4 92 C4 96 7 98 10 98 L10 62 C10 59 8 58 6 58 Z" fill="#E4D8BE" stroke="#5B3FDB" stroke-width="1.4"/>
+    <path d="M106 60 L106 92 C106 96 103 98 100 98 L100 62 C100 59 102 58 104 58 Z" fill="#E4D8BE" stroke="#5B3FDB" stroke-width="1.4"/>
+
+    <!-- left page -->
+    <path d="M10 62
+             C10 58 12 56 16 56
+             L50 56
+             L50 98
+             L16 98
+             C12 98 10 96 10 92 Z"
+          fill="url(#pageGradI)" stroke="#5B3FDB" stroke-width="2.6"/>
+
+    <!-- right page -->
+    <path d="M100 62
+             C100 58 98 56 94 56
+             L60 56
+             L60 98
+             L94 98
+             C98 98 100 96 100 92 Z"
+          fill="url(#pageGradI)" stroke="#5B3FDB" stroke-width="2.6"/>
+
+    <!-- spine -->
+    <line x1="55" y1="54" x2="55" y2="98" stroke="#5B3FDB" stroke-width="3"/>
+
+    <!-- ruled rows + column divider, left page -->
+    <line x1="17" y1="66" x2="49" y2="66" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="17" y1="73" x2="49" y2="73" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="17" y1="80" x2="49" y2="80" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="17" y1="87" x2="49" y2="87" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="38" y1="63" x2="38" y2="93" stroke="#D8CDEA" stroke-width="1.5"/>
+
+    <!-- ruled rows + column divider, right page -->
+    <line x1="61" y1="66" x2="93" y2="66" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="61" y1="73" x2="93" y2="73" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="61" y1="80" x2="93" y2="80" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="61" y1="87" x2="93" y2="87" stroke="#D8CDEA" stroke-width="1.5"/>
+    <line x1="82" y1="63" x2="82" y2="93" stroke="#D8CDEA" stroke-width="1.5"/>
+
+    <!-- glowing rune entry -->
+    <circle cx="69" cy="73" r="1.8" fill="#F4B740"/>
+
+    <!-- clasp -->
+    <rect x="49" y="52" width="12" height="7" rx="2" fill="#F4B740" stroke="#8B6FE8" stroke-width="1.4"/>
+
+    <!-- wand -->
+    <line x1="55" y1="52" x2="86" y2="16" stroke="url(#wandGradI)" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="86" cy="16" r="6" fill="#F4B740"/>
+
+    <!-- sparkles -->
+    <path d="M104 28 l2.6 6 6 2.6 -6 2.6 -2.6 6 -2.6 -6 -6 -2.6 6 -2.6 Z" fill="#8B6FE8"/>
+    <path d="M72 2 l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8 Z" fill="#F4B740"/>
+  </g>
+</svg>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 
 from ..db import get_db
 
@@ -161,21 +162,71 @@ def undo_delete_event(event_id: int) -> dict | None:
 
 def seed_demo_data() -> list[dict]:
     demo_rows = [
-        ("Monthly salary", 68000, "income", "Salary", "July salary credited", "2026-07-01"),
-        ("Metro recharge", 1200, "expense", "Transport", "Commute card top-up", "2026-07-02"),
-        ("Team dinner", 2450, "expense", "Food", "Celebration dinner", "2026-07-03"),
-        ("Freelance landing page", 18000, "income", "Freelance", "Client milestone payment", "2026-07-05"),
-        ("Pharmacy order", 980, "expense", "Health", "Medicines and essentials", "2026-07-06"),
-        ("Streaming annual plan", 2499, "expense", "Entertainment", "Renewed annual subscription", "2026-07-08"),
-        ("Laptop accessory", 6200, "expense", "Shopping", "Mechanical keyboard", "2026-07-10"),
-        ("Electricity bill", 4100, "expense", "Bills", "Monthly utility bill", "2026-07-11"),
-        ("Weekend groceries", 2850, "expense", "Food", "Bulk home groceries", "2026-07-13"),
+
+        # ---------------- APRIL ----------------
+        ("Monthly salary",68000,"income","Salary","April salary","2026-04-01"),
+        ("House rent",18000,"expense","Bills","Monthly rent","2026-04-02"),
+        ("Groceries",5200,"expense","Food","Weekly groceries","2026-04-05"),
+        ("Petrol",2400,"expense","Transport","Fuel refill","2026-04-08"),
+        ("Netflix",649,"expense","Entertainment","Monthly subscription","2026-04-10"),
+        ("Electricity bill",3650,"expense","Bills","Utility bill","2026-04-15"),
+        ("Dining out",1850,"expense","Food","Weekend dinner","2026-04-20"),
+        ("Coffee",280,"expense","Food","Cafe stop","2026-04-22"),
+        ("Uber",420,"expense","Transport","Airport ride","2026-04-24"),
+        ("Gym membership",1800,"expense","Health","Monthly gym","2026-04-26"),
+        ("Internet bill",999,"expense","Bills","Broadband","2026-04-27"),
+        ("Book purchase",650,"expense","Education","Technical book","2026-04-28"),
+
+
+        # ---------------- MAY ----------------
+        ("Monthly salary",68000,"income","Salary","May salary","2026-05-01"),
+        ("House rent",18000,"expense","Bills","Monthly rent","2026-05-02"),
+        ("Groceries",5600,"expense","Food","Weekly groceries","2026-05-06"),
+        ("Electricity bill",3720,"expense","Bills","Utility bill","2026-05-14"),
+        ("Movie night",980,"expense","Entertainment","Cinema","2026-05-17"),
+        ("Freelance logo",12000,"income","Freelance","Logo design","2026-05-23"),
+        ("Shopping",4200,"expense","Shopping","Summer clothes","2026-05-28"),
+        ("Coffee",310,"expense","Food","Morning coffee","2026-05-11"),
+        ("Fuel",2300,"expense","Transport","Petrol refill","2026-05-13"),
+        ("Internet bill",999,"expense","Bills","Broadband","2026-05-20"),
+        ("Gym membership",1800,"expense","Health","Monthly gym","2026-05-24"),
+        ("Groceries",2100,"expense","Food","Quick grocery run","2026-05-30"),
+
+        # ---------------- JUNE ----------------
+        ("Monthly salary",68000,"income","Salary","June salary","2026-06-01"),
+        ("House rent",18000,"expense","Bills","Monthly rent","2026-06-02"),
+        ("Flight tickets",11000,"expense","Transport","Weekend trip","2026-06-07"),
+        ("Dining out",4300,"expense","Food","Birthday celebration","2026-06-12"),
+        ("Electricity bill",3980,"expense","Bills","Utility bill","2026-06-14"),
+        ("Freelance landing page",18000,"income","Freelance","Client milestone","2026-06-19"),
+        ("Groceries",6100,"expense","Food","Monthly groceries","2026-06-24"),
+        ("Coffee",250,"expense","Food","Coffee","2026-06-09"),
+        ("Internet bill",999,"expense","Bills","Broadband","2026-06-16"),
+        ("Movie",750,"expense","Entertainment","Weekend movie","2026-06-18"),
+        ("Fuel",2600,"expense","Transport","Petrol","2026-06-22"),
+        ("Gym membership",1800,"expense","Health","Monthly gym","2026-06-28"),
+
+
+        # ---------------- JULY ----------------
+        ("Monthly salary",68000,"income","Salary","July salary credited","2026-07-01"),
+        ("Metro recharge",1200,"expense","Transport","Commute card top-up","2026-07-02"),
+        ("Team dinner",2450,"expense","Food","Celebration dinner","2026-07-03"),
+        ("Freelance landing page",18000,"income","Freelance","Client milestone payment","2026-07-05"),
+        ("Pharmacy order",980,"expense","Health","Medicines","2026-07-06"),
+        ("Streaming annual plan",2499,"expense","Entertainment","Annual subscription","2026-07-08"),
+        ("Laptop accessory",6200,"expense","Shopping","Mechanical keyboard","2026-07-10"),
+        ("Electricity bill",4100,"expense","Bills","Monthly utility bill","2026-07-11"),
+        ("Weekend groceries",2850,"expense","Food","Bulk groceries","2026-07-13"),
+        ("Bonus",15000,"income","Salary","Quarterly bonus","2026-07-15"),
+        ("Coffee",300,"expense","Food","Cafe","2026-07-17"),
+        ("Fuel",2500,"expense","Transport","Petrol","2026-07-18"),
+        ("Internet bill",999,"expense","Bills","Broadband","2026-07-21"),
+        ("Gym membership",1800,"expense","Health","Monthly gym","2026-07-24"),
+        ("Weekend movie",850,"expense","Entertainment","Cinema","2026-07-27"),
     ]
 
     db = get_db()
-    existing = db.execute("SELECT COUNT(*) AS count FROM transactions").fetchone()
-    if existing["count"] > 0:
-        return list_transactions()
+    db.execute("DELETE FROM transactions")
 
     db.executemany(
         """
@@ -187,6 +238,31 @@ def seed_demo_data() -> list[dict]:
     db.commit()
     return list_transactions()
 
+def get_setting(key):
+    db = get_db()
+
+    row = db.execute(
+        "SELECT value FROM settings WHERE key=?",
+        (key,),
+    ).fetchone()
+
+    return row["value"] if row else ""
+
+
+def set_setting(key, value):
+    db = get_db()
+
+    db.execute(
+        """
+        INSERT INTO settings(key,value)
+        VALUES(?,?)
+        ON CONFLICT(key)
+        DO UPDATE SET value=excluded.value
+        """,
+        (key, value),
+    )
+
+    db.commit()
 
 def summary() -> dict:
     transactions = list_transactions()
@@ -219,7 +295,21 @@ def summary() -> dict:
         ],
         "pulse": pulse,
     }
+def available_months():
+    db = get_db()
 
+    rows = db.execute(
+        """
+        SELECT DISTINCT
+            strftime('%Y-%m', transaction_date) AS value,
+            strftime('%m', transaction_date) AS month,
+            strftime('%Y', transaction_date) AS year
+        FROM transactions
+        ORDER BY value DESC
+        """
+    ).fetchall()
+
+    return [dict(row) for row in rows]
 
 def _build_pulse(transactions: list[dict]) -> list[dict]:
     today = datetime.now().date()
@@ -256,3 +346,70 @@ def _build_pulse(transactions: list[dict]) -> list[dict]:
             point["flagged"] = point["date"] == standout["date"]
 
     return points
+
+
+def find_possible_duplicate(payload):
+    """
+    Look for a recent transaction that is very similar.
+    Returns the matching row or None.
+    """
+    db = get_db()
+    amount = float(payload["amount"])
+    title = payload["title"].strip().lower()
+    category = payload["category"]
+    tx_type = payload["type"]
+
+    cutoff = (
+        datetime.now() - timedelta(days=2)
+    ).strftime("%Y-%m-%d")
+
+    rows = db.execute(
+        """
+        SELECT *
+        FROM transactions
+        WHERE type = ?
+          AND category = ?
+          AND transaction_date >= ?
+        ORDER BY transaction_date DESC
+        """,
+        (
+            tx_type,
+            category,
+            cutoff,
+        ),
+    ).fetchall()
+
+    for row in rows:
+
+        existing_amount = float(row["amount"])
+
+        # Allow ±5% (minimum ₹5)
+        if abs(existing_amount - amount) > max(amount * 0.05, 5):
+            continue
+
+        similarity = SequenceMatcher(
+            None,
+            title,
+            row["title"].lower(),
+        ).ratio()
+
+        if similarity >= 0.75:
+            reasons = []
+
+            reasons.append("Same category")
+            amount_difference = abs(existing_amount - amount)
+            if amount_difference < 1:
+                reasons.append("Same amount")
+            else:
+                reasons.append(f"Amount differs by only ₹{amount_difference:.2f}")
+
+            reasons.append(f"Title similarity {round(similarity * 100)}%")
+
+            reasons.append("Recorded within the last 48 hours")
+
+            return {
+                "transaction": dict(row),
+                "reasons": reasons,
+            }
+
+    return None

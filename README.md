@@ -45,10 +45,30 @@ frontend/
 - Add transactions with validation
 - View transaction history
 - Get income, expense, net balance, and category summaries
-- Read smart in-app alerts
+- Read smart in-app alerts from the bell menu
+- See new warnings slide in on the right side of the screen and fade away like real product notifications
+- Send important alert emails through Resend
 - Optionally send alert payloads to a webhook URL
 - Spot anomaly days in the Spending Pulse chart
+- Browse transaction history in pages of 10 entries inside the ledger card
 - Undo deleted transactions through a lightweight event log
+
+## Notification and email use cases
+
+Ledgerdemain avoids noisy emails. In-app notifications are used for ledger activity, while Resend email is reserved for moments that deserve attention:
+
+- Possible duplicate transaction detected before saving
+- Warning or critical smart spending alert, such as unusual spending spikes or negative cashflow risk
+- Welcome email when an alert email is saved for the first time
+- Confirmation email when the alert email is changed
+- Routine edits, deletes, restores, and demo-data events stay in-app only
+
+Configure email delivery with:
+
+```bash
+RESEND_API_KEY=your_resend_key
+RESEND_FROM_EMAIL="Ledgerdemain <your_verified_sender@example.com>"
+```
 
 ## AI usage
 

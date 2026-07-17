@@ -39,10 +39,9 @@ textarea {
 .app-shell {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 32px 20px 48px;
+  padding: 0 20px 48px;
 }
 
-.branding-bar,
 .panel,
 .summary-card,
 .banner {
@@ -60,18 +59,32 @@ textarea {
 }
 
 .branding-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 18px;
-  padding: 14px 18px;
-  border-radius: 24px;
-  position: relative;
-  min-height: 68px;
-  overflow: visible;
-  z-index: 15;
+  padding: 20px 0;
+  margin: 0 0 28px;
+  background: transparent;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter:blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
+.brand-lockup{
+    display:flex;
+    align-items:center;
+    gap:18px;
+}
+.brand-lockup p{
 
+    margin-top:4px;
+
+    color:#7b8191;
+
+    font-size:.96rem;
+}
 .branding-bar h1 {
   font-size: clamp(1.9rem, 4vw, 2.5rem);
   line-height: 0.92;
@@ -95,6 +108,12 @@ td span {
   width: 28px;
   height: 28px;
   color: var(--accent);
+}
+.brand-logo{
+    width:52px;
+    height:52px;
+    object-fit:contain;
+    flex-shrink:0;
 }
 
 .branding-actions {
@@ -363,7 +382,43 @@ td strong,
   text-underline-offset: 3px;
   cursor: pointer;
 }
+.smoke-button {
+  appearance: none;
+  -webkit-appearance: none;
 
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+
+  padding: 0;
+
+  border: none;
+  outline: none;
+
+  border-radius: 50%;
+
+  background: transparent;
+
+  cursor: pointer;
+
+  color: var(--expense);
+
+  transition: all .18s ease;
+}
+
+.smoke-button:hover {
+  background: rgba(201,79,45,.08);
+  transform: translateY(-1px);
+}
+
+.smoke-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
 /* ==============================
    Vanish Animation
 ============================== */
@@ -721,6 +776,49 @@ td strong,
     box-shadow: inset 0 0 0 rgba(232, 184, 75, 0);
   }
 }
+
+.month-strip{
+    display:flex;
+    gap:10px;
+    margin:18px 0 26px;
+    flex-wrap:wrap;
+}
+
+.month-chip{
+
+    border:none;
+
+    background:#f7f4ef;
+
+    color:#6a6478;
+
+    padding:10px 18px;
+
+    border-radius:999px;
+
+    cursor:pointer;
+
+    transition:.2s;
+}
+
+.month-chip:hover{
+
+    transform:translateY(-2px);
+}
+
+.month-chip.active{
+
+    background:linear-gradient(
+        135deg,
+        #6f4cf6,
+        #5537df
+    );
+
+    color:white;
+
+    box-shadow:
+        0 8px 22px rgba(92,64,235,.28);
+}
 /* ==========================
       GOLD COIN RAIN
 ========================== */
@@ -789,5 +887,362 @@ td strong,
         rotate(calc(var(--rotate) + 180deg))
         scale(.84);
         opacity:0;
+    }
+}
+
+/* ===================================
+   Duplicate Detection Modal
+=================================== */
+
+.modal-backdrop{
+
+    position:fixed;
+
+    inset:0;
+
+    background:rgba(16,20,28,.55);
+
+    backdrop-filter:blur(8px);
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    z-index:100000;
+
+    animation:fadeBackdrop .22s ease;
+}
+
+.duplicate-modal{
+
+    width:min(460px,92vw);
+
+    background:rgba(255,255,255,.96);
+
+    border-radius:24px;
+
+    padding:30px;
+
+    border:1px solid rgba(232,184,75,.35);
+
+    box-shadow:
+        0 30px 80px rgba(0,0,0,.25),
+        0 0 0 1px rgba(255,255,255,.35);
+
+    animation:popModal .28s cubic-bezier(.18,.9,.22,1);
+
+    text-align:center;
+}
+
+.duplicate-icon{
+
+    width:70px;
+
+    height:70px;
+
+    margin:0 auto 18px;
+
+    border-radius:50%;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    font-size:34px;
+
+    background:linear-gradient(135deg,#fff8dc,#ffd54a);
+
+    box-shadow:
+        0 8px 25px rgba(232,184,75,.35);
+
+    animation:wandFloat 2.5s ease-in-out infinite;
+}
+
+.duplicate-modal h2{
+
+    margin:0;
+
+    color:#1d2433;
+
+    font-size:1.45rem;
+}
+
+.duplicate-copy{
+
+    margin:14px auto 24px;
+
+    max-width:340px;
+
+    color:#6b7280;
+
+    line-height:1.6;
+}
+
+.duplicate-card{
+
+    background:#f8fafc;
+
+    border:1px solid rgba(0,0,0,.06);
+
+    border-radius:18px;
+
+    padding:18px;
+
+    margin-bottom:24px;
+}
+
+.duplicate-title{
+    font-weight:700;
+    font-size:1.08rem;
+    color:#202939;
+    margin-bottom:10px;
+}
+
+.duplicate-details{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    color:#667085;
+    font-size:.92rem;
+}
+
+.duplicate-actions{
+
+    display:flex;
+
+    justify-content:flex-end;
+
+    gap:14px;
+}
+
+.duplicate-actions button{
+
+    min-width:130px;
+}
+
+/* ========================= */
+
+@keyframes popModal{
+
+0%{
+
+transform:translateY(18px) scale(.92);
+
+opacity:0;
+}
+
+100%{
+
+transform:translateY(0) scale(1);
+
+opacity:1;
+}
+
+}
+
+@keyframes fadeBackdrop{
+
+from{
+
+opacity:0;
+}
+
+to{
+
+opacity:1;
+}
+
+}
+
+@keyframes wandFloat{
+
+0%{
+
+transform:translateY(0px) rotate(-3deg);
+}
+
+50%{
+
+transform:translateY(-6px) rotate(3deg);
+}
+
+100%{
+
+transform:translateY(0px) rotate(-3deg);
+}
+
+}
+.duplicate-reasons{
+    margin:20px 0;
+    text-align:left;
+}
+
+.duplicate-reasons h4{
+    margin-bottom:12px;
+    color:#1d2433;
+    font-size:.95rem;
+}
+
+.duplicate-reason{
+    padding:8px 0;
+    color:#596273;
+    font-size:.92rem;
+}
+
+.notification-input{
+    width:100%;
+    margin:18px 0 14px;
+    padding:14px 18px;
+
+    border:1px solid rgba(42,48,60,.12);
+    border-radius:18px;
+
+    background:rgba(255,255,255,.75);
+
+    font-size:1rem;
+    color:#202939;
+
+    transition:.22s ease;
+}
+
+.notification-input::placeholder{
+    color:#9ca3af;
+}
+
+.notification-input:focus{
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:
+        0 0 0 4px rgba(92,62,235,.12);
+}
+
+.ledger-pagination{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    margin-top:18px;
+    padding-top:16px;
+    border-top:1px solid rgba(42,48,60,.08);
+    color:#667085;
+    font-size:.9rem;
+}
+
+.pagination-actions{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#4b5563;
+    font-weight:700;
+}
+
+.pagination-arrow{
+    width:34px;
+    height:34px;
+    border-radius:999px;
+    border:1px solid rgba(91,63,219,.22);
+    background:rgba(255,255,255,.78);
+    color:var(--accent);
+    cursor:pointer;
+    font-weight:800;
+    transition:.2s ease;
+}
+
+.pagination-arrow:not(:disabled):hover{
+    background:var(--accent);
+    color:#fff;
+    transform:translateY(-1px);
+    box-shadow:0 10px 20px rgba(91,63,219,.2);
+}
+
+.pagination-arrow:disabled{
+    cursor:not-allowed;
+    opacity:.35;
+}
+
+.live-notification-stack{
+    position:fixed;
+    top:92px;
+    right:22px;
+    z-index:90000;
+    display:grid;
+    gap:12px;
+    width:min(360px, calc(100vw - 32px));
+    pointer-events:none;
+}
+
+.live-notification{
+    padding:16px 18px;
+    border-radius:20px;
+    background:rgba(255,255,255,.94);
+    border:1px solid rgba(91,63,219,.18);
+    box-shadow:0 22px 55px rgba(31,36,52,.18);
+    animation:omen-slide 4.6s ease forwards;
+    overflow:hidden;
+}
+
+.live-notification::before{
+    content:"";
+    display:block;
+    width:42px;
+    height:3px;
+    margin-bottom:10px;
+    border-radius:999px;
+    background:var(--gold);
+    box-shadow:0 0 18px rgba(232,184,75,.55);
+}
+
+.live-notification.warning{
+    border-color:rgba(232,184,75,.42);
+}
+
+.live-notification.critical{
+    border-color:rgba(231,76,60,.35);
+}
+
+.live-notification-kicker{
+    display:block;
+    margin-bottom:4px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    color:var(--accent);
+    font-size:.68rem;
+    font-weight:800;
+}
+
+.live-notification strong{
+    display:block;
+    color:#202939;
+    margin-bottom:5px;
+}
+
+.live-notification p{
+    margin:0;
+    color:#667085;
+    font-size:.9rem;
+    line-height:1.45;
+}
+
+@keyframes omen-slide{
+    0%{
+        opacity:0;
+        transform:translateX(28px) scale(.96);
+        filter:blur(4px);
+    }
+    12%,
+    78%{
+        opacity:1;
+        transform:translateX(0) scale(1);
+        filter:blur(0);
+    }
+    100%{
+        opacity:0;
+        transform:translateX(26px) scale(.98);
+        filter:blur(3px);
     }
 }

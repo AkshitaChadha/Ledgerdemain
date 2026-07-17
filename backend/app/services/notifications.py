@@ -17,9 +17,9 @@ def create_notification(
     action_text: str | None = None,
     source_transaction_id: int | None = None,
     source_transaction_title: str | None = None,
-) -> None:
+) -> dict:
     db = get_db()
-    db.execute(
+    cursor = db.execute(
         """
         INSERT INTO notifications(
             title,
@@ -47,6 +47,26 @@ def create_notification(
         ),
     )
     db.commit()
+    row = db.execute(
+        """
+        SELECT
+            id,
+            title,
+            message,
+            severity,
+            medium,
+            action_label,
+            action_text,
+            source_transaction_id,
+            source_transaction_title,
+            created_at,
+            is_read
+        FROM notifications
+        WHERE id = ?
+        """,
+        (cursor.lastrowid,),
+    ).fetchone()
+    return dict(row)
 
 
 def get_notifications() -> list[dict]:
@@ -66,6 +86,7 @@ def get_notifications() -> list[dict]:
             created_at,
             is_read
         FROM notifications
+        WHERE is_read = 0
         ORDER BY datetime(created_at) DESC, id DESC
         LIMIT 20
         """

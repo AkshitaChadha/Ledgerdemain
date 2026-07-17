@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import coinDropSound from "./assets/coin_sound.mp3";
+import logo from "./assets/ledgerdemain-icon.svg";
+import API from "./api";
 const INCOME_CATEGORIES = [
   "Salary",
   "Freelance",
@@ -46,6 +48,22 @@ const initialForm = {
   transaction_date: new Date().toISOString().slice(0, 10)
 };
 
+function deriveMonthsFromTransactions(items = []) {
+  return Array.from(
+    new Set(
+      items
+        .map((item) => item.transaction_date?.slice(0, 7))
+        .filter(Boolean)
+    )
+  )
+    .sort()
+    .reverse()
+    .map((value) => {
+      const [year, month] = value.split("-");
+      return { value, month, year };
+    });
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -65,7 +83,14 @@ export default function App() {
   const toastTimerRef = useRef(null);
   const coinSound = useRef(null);
   const bellRef = useRef(null);
-  
+  const [duplicateModal, setDuplicateModal] = useState(null);
+  const [duplicateReasons, setDuplicateReasons] = useState([]);
+  const [months, setMonths] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("");
+  const [transactionPage, setTransactionPage] = useState(0);
+  const [liveNotifications, setLiveNotifications] = useState([]);
+  const notificationIdsRef = useRef(new Set());
 
   const categories = form.type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
 
@@ -107,14 +132,30 @@ export default function App() {
     setLoading(true);
     setServerError("");
     try {
-      const response = await fetch("/api/bootstrap");
+      const response = fetch(`${API}/api/bootstrap`);
       if (!response.ok) {
         throw new Error("Failed to load dashboard data.");
       }
       const data = await response.json();
+      const settings = await fetch(`${API}/api/settings`);
+      const settingsData = await settings.json();
+
+      setNotificationEmail(
+          settingsData.notification_email || ""
+      );
+      const availableMonths = data.months?.length
+        ? data.months
+        : deriveMonthsFromTransactions(data.transactions);
+
       setTransactions(data.transactions);
       setSummary(data.summary);
-      setNotifications(data.notifications);
+      setNotificationState(data.notifications);
+      setMonths(availableMonths);
+      setSelectedMonth((current) =>
+        current && availableMonths.some((month) => month.value === current)
+          ? current
+          : availableMonths[0]?.value || ""
+      );
       setForm((current) => ({
         ...current,
         category: current.type === "income" ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0]
@@ -137,6 +178,26 @@ export default function App() {
     );
   }
 
+  function setNotificationState(nextNotifications = [], options = {}) {
+    const unread = (nextNotifications || []).filter((item) => !item.is_read);
+
+    if (options.flash) {
+      const fresh = unread.filter((item) => !notificationIdsRef.current.has(item.id));
+
+      fresh.forEach((item) => {
+        setLiveNotifications((current) => [item, ...current].slice(0, 4));
+        window.setTimeout(() => {
+          setLiveNotifications((current) =>
+            current.filter((notification) => notification.id !== item.id)
+          );
+        }, 4600);
+      });
+    }
+
+    notificationIdsRef.current = new Set(unread.map((item) => item.id));
+    setNotifications(unread);
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -154,6 +215,13 @@ export default function App() {
       });
 
       const data = await response.json();
+      if (data.duplicateFound) {
+        setNotificationState(data.notifications, { flash: true });
+        setDuplicateModal(data.duplicate);
+        setDuplicateReasons(data.matchReasons || []);
+        setSubmitting(false);
+        return;
+      }
       if (!response.ok) {
         setErrors(data.errors || {});
         throw new Error("Please review the transaction details.");
@@ -161,7 +229,7 @@ export default function App() {
 
       setTransactions(data.transactions || [data.transaction, ...transactions]);
       setSummary(data.summary);
-      setNotifications(data.notifications);
+      setNotificationState(data.notifications, { flash: true });
       if (!isEditing && data.transaction?.type === "income") {
         if (coinSound.current) {
             coinSound.current.currentTime = 0;
@@ -193,6 +261,47 @@ setForm({
       setSubmitting(false);
     }
   }
+
+  async function forceSaveDuplicate() {
+  setSubmitting(true);
+
+  try {
+    const response = await fetch(`${API}/api/transactions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...form,
+        force_save: true,
+      }),
+    });
+
+    const data = await response.json();
+
+    setTransactions(data.transactions || [data.transaction, ...transactions]);
+    setSummary(data.summary);
+    setNotificationState(data.notifications, { flash: true });
+
+    setDuplicateModal(null);
+
+    setForm({
+      ...initialForm,
+      category:
+        form.type === "income"
+          ? INCOME_CATEGORIES[0]
+          : EXPENSE_CATEGORIES[0],
+      transaction_date: new Date().toISOString().slice(0, 10),
+    });
+
+    showToast({
+      message: "The spell was cast anyway.",
+    });
+
+  } finally {
+    setSubmitting(false);
+  }
+}
 
   function startEditing(transaction) {
     setEditingId(transaction.id);
@@ -227,7 +336,7 @@ setForm({
 
     try {
       // Delete in the background while the animation is running
-      const response = await fetch(`/api/transactions/${transaction.id}`, {
+      const response = await fetch(`${API}/api/transactions/${transaction.id}`, {
         method: "DELETE",
       });
 
@@ -252,7 +361,7 @@ setForm({
       // Now actually remove from the UI
       setTransactions(data.transactions);
       setSummary(data.summary);
-      setNotifications(data.notifications);
+      setNotificationState(data.notifications, { flash: true });
 
       if (editingId === transaction.id) {
         cancelEditing();
@@ -281,10 +390,10 @@ setForm({
 
           setTransactions(undoData.transactions);
           setSummary(undoData.summary);
-          setNotifications(undoData.notifications);
+          setNotificationState(undoData.notifications, { flash: true });
 
           showToast({
-            message: "✨ The ledger reversed the spell.",
+            message: "The ledger reversed the spell.",
           });
         },
       });
@@ -296,27 +405,153 @@ setForm({
     }
   }
   async function markNotificationsRead() {
-    const response = await fetch("/api/notifications/read-all", { method: "POST" });
+    const response = await fetch(`${API}/api//notifications/read-all`, { method: "POST" });
     const data = await response.json();
-    setNotifications(data.notifications);
+    setNotificationState(data.notifications);
+    setShowOmens(false);
   }
 
   async function loadDemoData() {
     setServerError("");
-    const response = await fetch("/api/seed", { method: "POST" });
+    const response = await fetch(`${API}/api/seed`, { method: "POST" });
     const data = await response.json();
+    const seededMonths = data.months?.length
+      ? data.months
+      : deriveMonthsFromTransactions(data.transactions);
     setTransactions(data.transactions);
     setSummary(data.summary);
-    setNotifications(data.notifications);
+    setNotificationState(data.notifications, { flash: true });
+    setMonths(seededMonths);
+    setSelectedMonth(seededMonths[0]?.value || "");
+    setTransactionPage(0);
     setEditingId(null);
+  }
+  async function saveNotificationEmail() {
+    setServerError("");
+
+    try {
+      const response = await fetch(`${API}/api/settings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          notification_email: notificationEmail
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error("Could not save notification email.");
+      }
+
+      const emailCopy = {
+        welcome: data.emailSent
+          ? "Welcome email sent. The ravens know where to fly."
+          : "Email saved. Add RESEND_API_KEY to send the welcome mail.",
+        changed: data.emailSent
+          ? "Alert email changed. Confirmation sent to the new address."
+          : "Email changed. Add RESEND_API_KEY to send confirmation mail.",
+      };
+
+      showToast({
+        message: emailCopy[data.emailEvent] || "Notification email saved."
+      });
+    } catch (error) {
+      setServerError(error.message);
+    }
   }
 
   const filteredTransactions = transactions.filter((transaction) => {
-    if (filter === "all") return true;
-    return transaction.type === filter;
+
+    if (filter !== "all" && transaction.type !== filter)
+        return false;
+    if (
+        selectedMonth &&
+        !transaction.transaction_date.startsWith(selectedMonth)
+    )
+        return false;
+    return true;
+});
+
+
+const monthSummary = (() => {
+  const income = filteredTransactions
+    .filter((t) => t.type === "income")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const expense = filteredTransactions
+    .filter((t) => t.type === "expense")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const byCategory = {};
+
+  filteredTransactions.forEach((t) => {
+    if (t.type === "expense") {
+      byCategory[t.category] =
+        (byCategory[t.category] || 0) + Number(t.amount);
+    }
   });
 
-  const unreadNotifications = notifications.filter((item) => !item.is_read);
+  return {
+    income,
+    expense,
+    net: income - expense,
+    transactionCount: filteredTransactions.length,
+
+    topCategories: Object.entries(byCategory)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([category, amount]) => ({
+        category,
+        amount,
+      })),
+  };
+})();
+const monthPulse = (() => {
+  const daily = {};
+
+  filteredTransactions.forEach((t) => {
+    if (t.type !== "expense") return;
+
+    daily[t.transaction_date] =
+      (daily[t.transaction_date] || 0) + Number(t.amount);
+  });
+
+  const dates = Object.keys(daily).sort();
+
+  const expenses = Object.values(daily);
+
+  const average =
+    expenses.length > 0
+      ? expenses.reduce((a, b) => a + b, 0) / expenses.length
+      : 0;
+
+  const points = dates.map((date) => ({
+    date,
+    expense: daily[date],
+    flagged: false,
+    ratio: average ? daily[date] / average : 0,
+  }));
+
+  const standout = points
+    .filter((point) => average > 0 && point.expense > average * 1.6)
+    .sort((a, b) => b.ratio - a.ratio || b.expense - a.expense || b.date.localeCompare(a.date))[0];
+
+  return points.map((point) => ({
+    ...point,
+    flagged: standout?.date === point.date,
+  }));
+})();
+
+  const unreadNotifications = (notifications ?? []).filter(
+    (item) => !item.is_read
+  );
+
+  useEffect(() => {
+    setTransactionPage(0);
+  }, [filter, selectedMonth]);
 
   if (loading) {
     return <LoadingScreen />;
@@ -327,7 +562,11 @@ setForm({
       {coinRain && <CoinRain />}
       <header className="branding-bar">
         <div className="brand-lockup">
-          <WandIcon className="brand-icon" />
+          <img
+            src={logo}
+            alt="Ledgerdemain"
+            className="brand-logo"
+          />
           <div>
             <h1>Ledgerdemain</h1>
             <p>Your money, made magically simple.</p>
@@ -352,7 +591,7 @@ setForm({
             </button>
             {showOmens ? (
               <NotificationPanel
-                notifications={notifications}
+                notifications={unreadNotifications}
                 onReadAll={markNotificationsRead}
               />
             ) : null}
@@ -364,16 +603,21 @@ setForm({
 
       <section className="dashboard-grid">
         <div className="stack">
-          <SummaryCards summary={summary} />
-          <PulseCard points={summary?.pulse || []} />
+          <SummaryCards summary={monthSummary} />
+          <PulseCard points={monthPulse} />
           <TransactionsTable
             transactions={filteredTransactions}
             filter={filter}
             setFilter={setFilter}
+            months={months}
+            selectedMonth={selectedMonth}
+            setSelectedMonth={setSelectedMonth}
             onEdit={startEditing}
             onDelete={handleDelete}
             deletingIds={deletingIds}
             sparklingIds={sparklingIds}
+            page={transactionPage}
+            setPage={setTransactionPage}
             
           />
         </div>
@@ -388,11 +632,25 @@ setForm({
             editingId={editingId}
             onCancel={cancelEditing}
           />
-          <CategoryCard categories={summary?.topCategories || []} />
+          <CategoryCard categories={monthSummary?.topCategories || []} />
+          <NotificationSettings
+              notificationEmail={notificationEmail}
+              setNotificationEmail={setNotificationEmail}
+              onSave={saveNotificationEmail}
+          />
         </div>
       </section>
 
       {toast ? <Toast toast={toast} onClose={() => setToast(null)} /> : null}
+      <LiveNotifications notifications={liveNotifications} />
+      {duplicateModal ? (
+        <DuplicateModal
+          transaction={duplicateModal}
+          reasons={duplicateReasons}
+          onCancel={() => setDuplicateModal(null)}
+          onConfirm={forceSaveDuplicate}
+        />
+      ) : null}
     </main>
   );
 }
@@ -614,19 +872,63 @@ function TransactionsTable({
   transactions,
   filter,
   setFilter,
+  months,
+  selectedMonth,
+  setSelectedMonth,
   onEdit,
   onDelete,
   deletingIds,
-  sparklingIds
+  sparklingIds,
+  page,
+  setPage
 }) {
+  const pageSize = 10;
+  const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const startIndex = safePage * pageSize;
+  const visibleTransactions = transactions.slice(startIndex, startIndex + pageSize);
+  const showingStart = transactions.length ? startIndex + 1 : 0;
+  const showingEnd = Math.min(startIndex + pageSize, transactions.length);
+
   return (
     <section className="panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">The ledger</p>
           <h2>Transaction history</h2>
+
+          <div className="month-strip">
+            {months.map((month) => {
+              const date = new Date(month.value + "-01");
+
+              const label = date.toLocaleString("default", {
+                month: "short",
+                year: "numeric",
+              });
+
+              return (
+                <button
+                  key={month.value}
+                  type="button"
+                  className={
+                    selectedMonth === month.value
+                      ? "month-chip active"
+                      : "month-chip"
+                  }
+                  onClick={() => setSelectedMonth(month.value)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="filter-group" role="tablist" aria-label="Transaction type filter">
+
+        <div
+          className="filter-group"
+          role="tablist"
+          aria-label="Transaction type filter"
+        >
           <button
             className={`filter-pill ${filter === "all" ? "active" : ""}`}
             onClick={() => setFilter("all")}
@@ -634,6 +936,7 @@ function TransactionsTable({
           >
             All
           </button>
+
           <button
             className={`filter-pill ${filter === "income" ? "active" : ""}`}
             onClick={() => setFilter("income")}
@@ -641,6 +944,7 @@ function TransactionsTable({
           >
             Income
           </button>
+
           <button
             className={`filter-pill ${filter === "expense" ? "active" : ""}`}
             onClick={() => setFilter("expense")}
@@ -665,7 +969,7 @@ function TransactionsTable({
               </tr>
             </thead>
             <tbody>
-              {transactions.map((transaction) => (
+              {visibleTransactions.map((transaction) => (
                 <tr
                   key={transaction.id}
                   className={[
@@ -713,10 +1017,38 @@ function TransactionsTable({
       ) : (
         <div className="empty-state">The ledger awaits its first incantation.</div>
       )}
+
+      <div className="ledger-pagination">
+        <span>
+          Showing {showingStart}-{showingEnd} of {transactions.length} entries
+        </span>
+        <div className="pagination-actions">
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={safePage === 0}
+            onClick={() => setPage(Math.max(safePage - 1, 0))}
+            aria-label="Previous 10 entries"
+          >
+            &lt;
+          </button>
+          <span>
+            {safePage + 1} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="pagination-arrow"
+            disabled={safePage >= totalPages - 1}
+            onClick={() => setPage(Math.min(safePage + 1, totalPages - 1))}
+            aria-label="Next 10 entries"
+          >
+            &gt;
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
-
 function CategoryCard({ categories }) {
   return (
     <section className="panel">
@@ -742,8 +1074,45 @@ function CategoryCard({ categories }) {
     </section>
   );
 }
+function NotificationSettings({
+  notificationEmail,
+  setNotificationEmail,
+  onSave,
+}) {
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Alerts</p>
+          <h2>Notification Email</h2>
+        </div>
+      </div>
 
+      <input
+        className="notification-input"
+        type="email"
+        placeholder="you@example.com"
+        value={notificationEmail}
+        onChange={(e) => setNotificationEmail(e.target.value)}
+      />
+
+      <p className="muted">
+        Emails send only for duplicate warnings and high-priority spending alerts.
+      </p>
+
+      <button
+        className="primary-button"
+        type="button"
+        onClick={onSave}
+      >
+        Save
+      </button>
+    </section>
+  );
+}
 function NotificationPanel({ notifications, onReadAll }) {
+  const unreadNotifications = (notifications || []).filter((item) => !item.is_read);
+
   return (
     <section className="omens-panel">
       <div className="omens-head">
@@ -756,8 +1125,8 @@ function NotificationPanel({ notifications, onReadAll }) {
         </button>
       </div>
       <div className="omens-list">
-        {notifications.length ? (
-          notifications.slice(0, 6).map((item) => (
+        {unreadNotifications.length ? (
+          unreadNotifications.slice(0, 6).map((item) => (
             <article key={item.id} className={`omen-item ${item.severity}`}>
               <p>{formatOmen(item)}</p>
               <span>{formatTimestamp(item.created_at)}</span>
@@ -768,6 +1137,24 @@ function NotificationPanel({ notifications, onReadAll }) {
         )}
       </div>
     </section>
+  );
+}
+
+function LiveNotifications({ notifications }) {
+  if (!notifications.length) {
+    return null;
+  }
+
+  return (
+    <div className="live-notification-stack" aria-live="polite">
+      {notifications.map((item) => (
+        <article key={item.id} className={`live-notification ${item.severity}`}>
+          <span className="live-notification-kicker">New omen</span>
+          <strong>{item.title}</strong>
+          <p>{formatOmen(item)}</p>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -840,7 +1227,93 @@ function FlameIcon() {
     </svg>
   );
 }
+function DuplicateModal({
+  transaction,
+  reasons,
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <div className="modal-backdrop">
+      <div className="duplicate-modal">
 
+        <div className="duplicate-icon">🪄</div>
+
+        <h2>The ledger senses an echo...</h2>
+
+        <p className="duplicate-copy">
+          A remarkably similar transaction already exists.
+          The ledger explains why it believes this may be a duplicate.
+        </p>
+
+        <div className="duplicate-card">
+
+          <div className="duplicate-title">
+            {transaction.title}
+          </div>
+
+          <div className="duplicate-details">
+
+            <span>{transaction.category}</span>
+
+            <span
+              className={
+                transaction.type === "income"
+                  ? "positive"
+                  : "negative"
+              }
+            >
+              {transaction.type === "income" ? "+" : "-"}
+              {formatCurrency(transaction.amount)}
+            </span>
+
+            <span>{transaction.transaction_date}</span>
+
+          </div>
+
+        </div>
+
+        <div className="duplicate-reasons">
+
+          <h4>Why it was flagged</h4>
+
+          {(reasons || []).map((reason, index) => (
+
+            <div
+              key={index}
+              className="duplicate-reason"
+            >
+              ✓ {reason}
+            </div>
+
+          ))}
+
+        </div>
+
+        <div className="duplicate-actions">
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={onCancel}
+          >
+            Return to Ledger
+          </button>
+
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={onConfirm}
+          >
+            Cast Anyway
+          </button>
+
+        </div>
+
+      </div>
+    </div>
+  );
+}
 function CoinRain() {
   const coins = Array.from({ length: 14 });
   return (
@@ -936,4 +1409,3 @@ function prettyDate(value) {
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
-

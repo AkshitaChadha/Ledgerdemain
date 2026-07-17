@@ -3,10 +3,11 @@ from flask import Flask
 from .config import Config
 from .db import close_db, init_app
 from .routes import api
-
+from flask_cors import CORS
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    CORS(app)
     app.config.from_object(Config)
 
     init_app(app)

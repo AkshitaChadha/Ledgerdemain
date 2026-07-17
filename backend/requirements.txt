@@ -1,1 +1,6 @@
 flask==3.1.1
+resend
+Flask-Cors
+gunicorn
+requests
+python-dotenv

@@ -8,6 +8,24 @@ The name is a small wordplay on "legerdemain," meaning sleight of hand. I turned
 
 The product direction is intentionally memorable: a clean financial ledger with a subtle magical language system. The theme isn't just visual polish — it maps to actual product behavior. Warnings are "omens." Delete is a reversible "vanish" action, not a hard remove. Smart alerts are designed to read as signal, not noise.
 
+## Preview
+
+### Dashboard
+
+![Dashboard](screenshots/Ledgerdemain dashboard 2.png)
+
+### Dashboard Analytics
+
+![Dashboard Analytics](screenshots/Ledgerdemain%20dashboard%202.png) (screenshots/ Ledgerdemain_ dashboard 2.png)
+
+### Duplicate Detection
+
+![Duplicate Detection](screenshots/Duplicate_Entry.png) ()
+
+### Email Notification
+
+![Email Notification](screenshots/Welcome_mail.png)
+
 ## Challenge Coverage
 
 Ledgerdemain covers the required assignment scope:

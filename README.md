@@ -7,25 +7,38 @@ Ledgerdemain is a lightweight full-stack mini-ledger. It lets users add, edit, d
 The name is a small wordplay on "legerdemain," meaning sleight of hand. I turned it into **Ledgerdemain** to connect the idea of a financial ledger with the feeling of making money management feel a little more effortless — even a little magical.
 
 The product direction is intentionally memorable: a clean financial ledger with a subtle magical language system. The theme isn't just visual polish — it maps to actual product behavior. Warnings are "omens." Delete is a reversible "vanish" action, not a hard remove. Smart alerts are designed to read as signal, not noise.
+### 🌐 Live Demo
+
+Link: https://ledgerdemain.vercel.app/
+
+> **Note:** The backend is hosted on Render's free tier. The first request may take **30–60 seconds** for the site to load. 
+
 
 ## Preview
 
-### Dashboard
+## Dashboard
 
-![Dashboard](screenshots/Ledgerdemain dashboard 2.png)
+![Dashboard](screenshots/Ledgerdemain_dashboard.png)
 
-### Dashboard Analytics
+## Dashboard Analytics
 
-![Dashboard Analytics](screenshots/Ledgerdemain%20dashboard%202.png) (screenshots/ Ledgerdemain_ dashboard 2.png)
+![Dashboard Analytics](screenshots/Ledgerdemain_dashboard_2.png) 
 
-### Duplicate Detection
+## Duplicate Detection
 
-![Duplicate Detection](screenshots/Duplicate_Entry.png) ()
+![Duplicate Detection](screenshots/Duplicate_Entry.png) 
 
-### Email Notification
+## Edit Transaction
 
-![Email Notification](screenshots/Welcome_mail.png)
+![Edit Transaction](screenshots/Edit_entry.png)  
 
+## Email Notification
+
+![Email Notification](screenshots/Welcome_email.png)
+
+## Alert Email
+
+![Alert Email](screenshots/Alert_email.png)
 ## Challenge Coverage
 
 Ledgerdemain covers the required assignment scope:

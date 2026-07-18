@@ -328,6 +328,9 @@ export default function App() {
       const data = await response.json();
       if (data.duplicateFound) {
         setNotificationState(data.notifications, { flash: true });
+        const duplicateReasons = (data.matchReasons || []).map(
+          (reason, index) => `${index + 1}. ${reason}`
+        );
         await sendBrowserEmail({
           templateId:
             import.meta.env.VITE_EMAILJS_ALERT_TEMPLATE_ID ||
@@ -335,9 +338,10 @@ export default function App() {
           subject: "Ledgerdemain detected a possible duplicate",
           eyebrow: "Duplicate warning",
           title: "The ledger sensed an echo.",
-          message: `${form.title} looks similar to ${data.duplicate?.title || "an existing transaction"}. ${(
-            data.matchReasons || []
-          ).join(" ")}`,
+          message: `${form.title} looks similar to ${data.duplicate?.title || "an existing transaction"}. The ledger found these matching signs:`,
+          reasons: duplicateReasons.length
+            ? duplicateReasons.join("\n")
+            : "1. The new entry strongly resembles an existing transaction.",
           action: "Compare the entries before keeping both.",
         });
         setDuplicateModal(data.duplicate);

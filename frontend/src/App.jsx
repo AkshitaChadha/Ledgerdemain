@@ -64,6 +64,19 @@ function deriveMonthsFromTransactions(items = []) {
     });
 }
 
+const EMAIL_ALERT_SEVERITIES = new Set(["warning", "critical"]);
+
+function emailJsConfigured() {
+  return Boolean(
+    import.meta.env.VITE_EMAILJS_SERVICE_ID &&
+      (import.meta.env.VITE_EMAILJS_TEMPLATE_ID ||
+        import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID ||
+        import.meta.env.VITE_EMAILJS_ALERT_TEMPLATE_ID) &&
+      import.meta.env.VITE_EMAILJS_PUBLIC_KEY &&
+      window.emailjs
+  );
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -201,6 +214,101 @@ export default function App() {
     setNotifications(unread);
   }
 
+  async function sendBrowserEmail(payload) {
+    if (!notificationEmail || !emailJsConfigured()) {
+      return false;
+    }
+
+    const templateId =
+      payload.templateId ||
+      import.meta.env.VITE_EMAILJS_TEMPLATE_ID ||
+      import.meta.env.VITE_EMAILJS_ALERT_TEMPLATE_ID ||
+      import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID;
+
+    try {
+      await window.emailjs.send(
+        import.meta.env.VITE_EMAILJS_SERVICE_ID,
+        templateId,
+        {
+          to_email: notificationEmail,
+          user_email: notificationEmail,
+          email: notificationEmail,
+          subject: payload.subject,
+          eyebrow: payload.eyebrow,
+          title: payload.title,
+          message: payload.message,
+          reasons: payload.reasons || payload.message,
+          action: payload.action || "Open Ledgerdemain and review the latest entry.",
+          app_name: "Ledgerdemain",
+        },
+        {
+          publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY,
+        }
+      );
+      return true;
+    } catch (error) {
+      console.warn("EmailJS send failed", error);
+      return false;
+    }
+  }
+
+  async function sendWelcomeEmail(eventType) {
+    const isChanged = eventType === "changed";
+    return sendBrowserEmail({
+      templateId:
+        import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID ||
+        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+      subject: isChanged ? "Ledgerdemain alert email changed" : "Welcome to Ledgerdemain",
+      eyebrow: isChanged ? "Alert route changed" : "Welcome omen",
+      title: isChanged ? "The ravens have a new route." : "The ledger knows where to find you.",
+      message: isChanged
+        ? "Your Ledgerdemain alert email was updated successfully. Important omens, duplicate warnings, and spending spikes will now arrive at this address."
+        : "Your alert email is connected. Ledgerdemain will stay quiet for ordinary bookkeeping and only send mail when something deserves attention.",
+      action: isChanged
+        ? "If this was not you, open the app and update the notification email."
+        : "Add a few entries to see the warning system come alive.",
+    });
+  }
+
+  async function sendAlertEmailDigest(alerts = [], transaction = null) {
+    const importantAlerts = alerts.filter((alert) =>
+      EMAIL_ALERT_SEVERITIES.has(alert.severity)
+    );
+
+    if (!importantAlerts.length) {
+      return false;
+    }
+
+    const transactionLabel = transaction?.title
+      ? `${transaction.title} (${formatCurrency(transaction.amount)})`
+      : "your latest ledger entry";
+    const reasons = importantAlerts
+      .map((alert, index) => `${index + 1}. ${alert.title}: ${alert.message}`)
+      .join("\n");
+    const actions = importantAlerts
+      .map((alert) => alert.action_text)
+      .filter(Boolean)
+      .join(" ");
+
+    return sendBrowserEmail({
+      templateId:
+        import.meta.env.VITE_EMAILJS_ALERT_TEMPLATE_ID ||
+        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+      subject:
+        importantAlerts.length > 1
+          ? `Ledgerdemain found ${importantAlerts.length} omens`
+          : importantAlerts[0].title,
+      eyebrow: "Warning omen",
+      title:
+        importantAlerts.length > 1
+          ? "The ledger found multiple omens."
+          : importantAlerts[0].title,
+      message: `Ledgerdemain reviewed ${transactionLabel} and found:\n\n${reasons}\n\nThe ledger is not judging the spend. It is asking you to look twice.`,
+      reasons,
+      action: actions || "Open Ledgerdemain and review the latest entry.",
+    });
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -209,7 +317,7 @@ export default function App() {
 
     try {
       const isEditing = editingId !== null;
-      const response = await fetch(isEditing ? `/api/transactions/${editingId}` : "/api/transactions", {
+      const response = await fetch(isEditing ? `${API}/api/transactions/${editingId}` : `${API}/api/transactions`, {
         method: isEditing ? "PUT" : "POST",
         headers: {
           "Content-Type": "application/json"
@@ -220,6 +328,18 @@ export default function App() {
       const data = await response.json();
       if (data.duplicateFound) {
         setNotificationState(data.notifications, { flash: true });
+        await sendBrowserEmail({
+          templateId:
+            import.meta.env.VITE_EMAILJS_ALERT_TEMPLATE_ID ||
+            import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
+          subject: "Ledgerdemain detected a possible duplicate",
+          eyebrow: "Duplicate warning",
+          title: "The ledger sensed an echo.",
+          message: `${form.title} looks similar to ${data.duplicate?.title || "an existing transaction"}. ${(
+            data.matchReasons || []
+          ).join(" ")}`,
+          action: "Compare the entries before keeping both.",
+        });
         setDuplicateModal(data.duplicate);
         setDuplicateReasons(data.matchReasons || []);
         setSubmitting(false);
@@ -233,6 +353,7 @@ export default function App() {
       setTransactions(data.transactions || [data.transaction, ...transactions]);
       setSummary(data.summary);
       setNotificationState(data.notifications, { flash: true });
+      await sendAlertEmailDigest(data.alerts || [], data.transaction);
       if (!isEditing && data.transaction?.type === "income") {
         if (coinSound.current) {
             coinSound.current.currentTime = 0;
@@ -285,6 +406,7 @@ setForm({
     setTransactions(data.transactions || [data.transaction, ...transactions]);
     setSummary(data.summary);
     setNotificationState(data.notifications, { flash: true });
+    await sendAlertEmailDigest(data.alerts || [], data.transaction);
 
     setDuplicateModal(null);
 
@@ -378,7 +500,7 @@ setForm({
           setToast(null);
 
           const undoResponse = await fetch(
-            `/api/transactions/undo-delete/${data.undoEventId}`,
+            `${API}/api/transactions/undo-delete/${data.undoEventId}`,
             {
               method: "POST",
             }
@@ -434,13 +556,18 @@ setForm({
         throw new Error("Could not save notification email.");
       }
 
+      let sent = false;
+      if (data.emailEvent) {
+        sent = await sendWelcomeEmail(data.emailEvent);
+      }
+
       const emailCopy = {
-        welcome: data.emailSent
-          ? "Welcome email sent. The ravens know where to fly."
+        welcome: sent
+          ? "✨ The ledger now knows where to send its whispers."
           : "✨ The ledger now knows where to send its whispers.",
-        changed: data.emailSent
+        changed: sent
           ? "Alert email changed. Confirmation sent to the new address."
-          : "Email changed. Confirmation mail will be sent once delivery is fully configured.",
+          : "Notification email updated.",
       };
 
       showToast({
